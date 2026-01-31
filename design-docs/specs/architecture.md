@@ -7,6 +7,347 @@ This document describes system architecture and design decisions.
 git-xnotes is a tool for AI agents to leave code review comments stored in git notes.
 It does NOT manage review state or merge operations - only comments.
 
+## Usage Modes
+
+git-xnotes can be used in three modes:
+
+### 1. CLI Tool
+
+```bash
+git-xnotes --repo /path/to/repo query --base main --target feature/auth
+```
+
+### 2. Library (TypeScript)
+
+```typescript
+import { GitXNotes } from "git-xnotes";
+
+const xnotes = new GitXNotes({
+  gitDir: "/path/to/repo",        // Required: path to git repository
+});
+
+// Add comment
+await xnotes.addComment({
+  author: "security-reviewer",
+  description: "SQL injection risk",
+  location: { commit: "abc123", path: "src/db.ts", range: { startLine: 42 } },
+  category: "security",
+  severity: "error",
+});
+
+// Query comments
+const response = await xnotes.queryDiff({
+  base: "main",
+  target: "feature/auth",
+});
+```
+
+### 3. MCP Server (for AI Agents)
+
+```bash
+# Start MCP server
+git-xnotes mcp --repo /path/to/repo
+```
+
+MCP configuration (claude_desktop_config.json):
+```json
+{
+  "mcpServers": {
+    "git-xnotes": {
+      "command": "git-xnotes",
+      "args": ["mcp", "--repo", "/path/to/repo"]
+    }
+  }
+}
+```
+
+---
+
+## MCP Tools
+
+git-xnotes exposes the following MCP tools for AI agents:
+
+### xnotes_add_comment
+
+Add a new comment to the repository.
+
+```typescript
+{
+  name: "xnotes_add_comment",
+  description: "Add a code review comment to a git repository",
+  inputSchema: {
+    type: "object",
+    properties: {
+      author: { type: "string", description: "Agent ID" },
+      description: { type: "string", description: "Comment content" },
+      commit: { type: "string", description: "Commit SHA" },
+      path: { type: "string", description: "File path" },
+      startLine: { type: "number", description: "Start line number" },
+      endLine: { type: "number", description: "End line number (optional)" },
+      category: { type: "string", enum: ["bug", "security", "performance", "style", "logic", "suggestion"] },
+      severity: { type: "string", enum: ["error", "warning", "info"] },
+      parent: { type: "string", description: "Parent comment ID for thread reply (optional)" },
+      status: { type: "string", enum: ["open", "resolved", "dismissed"], description: "Set thread status (optional)" }
+    },
+    required: ["author", "description", "commit", "path", "startLine"]
+  }
+}
+```
+
+### xnotes_edit_comment
+
+Edit an existing comment.
+
+```typescript
+{
+  name: "xnotes_edit_comment",
+  description: "Edit an existing code review comment",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Comment ID to edit" },
+      description: { type: "string", description: "Updated content" },
+      category: { type: "string", enum: ["bug", "security", "performance", "style", "logic", "suggestion"] },
+      severity: { type: "string", enum: ["error", "warning", "info"] },
+      status: { type: "string", enum: ["open", "resolved", "dismissed"] }
+    },
+    required: ["id"]
+  }
+}
+```
+
+### xnotes_query_diff
+
+Query comments for commits in a diff range.
+
+```typescript
+{
+  name: "xnotes_query_diff",
+  description: "Get all comments for commits between base and target",
+  inputSchema: {
+    type: "object",
+    properties: {
+      base: { type: "string", description: "Base branch or commit" },
+      target: { type: "string", description: "Target branch or commit (default: HEAD)" }
+    },
+    required: ["base"]
+  }
+}
+```
+
+### xnotes_get_comment
+
+Get a single comment by ID.
+
+```typescript
+{
+  name: "xnotes_get_comment",
+  description: "Get a comment by its ID",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Comment ID" }
+    },
+    required: ["id"]
+  }
+}
+```
+
+### xnotes_get_thread
+
+Get a thread by root comment ID.
+
+```typescript
+{
+  name: "xnotes_get_thread",
+  description: "Get a comment thread by root comment ID",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Root comment ID" }
+    },
+    required: ["id"]
+  }
+}
+```
+
+### xnotes_get_threads_by_commit
+
+Get all threads for a specific commit.
+
+```typescript
+{
+  name: "xnotes_get_threads_by_commit",
+  description: "Get all comment threads for a specific commit",
+  inputSchema: {
+    type: "object",
+    properties: {
+      commit: { type: "string", description: "Commit SHA" }
+    },
+    required: ["commit"]
+  }
+}
+```
+
+Response:
+```typescript
+interface CommitThreadsResponse {
+  type: "commit_threads";
+  commit: string;
+  threads: Thread[];
+}
+```
+
+### xnotes_get_threads_by_commits
+
+Get all threads for multiple commits.
+
+```typescript
+{
+  name: "xnotes_get_threads_by_commits",
+  description: "Get all comment threads for multiple commits",
+  inputSchema: {
+    type: "object",
+    properties: {
+      commits: {
+        type: "array",
+        items: { type: "string" },
+        description: "Array of commit SHAs"
+      }
+    },
+    required: ["commits"]
+  }
+}
+```
+
+Response:
+```typescript
+interface CommitsThreadsResponse {
+  type: "commits_threads";
+  commits: {
+    commit: string;
+    threads: Thread[];
+  }[];
+}
+```
+
+### xnotes_list_all
+
+List all comments in the repository.
+
+```typescript
+{
+  name: "xnotes_list_all",
+  description: "List all comments in the repository",
+  inputSchema: {
+    type: "object",
+    properties: {}
+  }
+}
+```
+
+### xnotes_push
+
+Push notes to remote.
+
+```typescript
+{
+  name: "xnotes_push",
+  description: "Push xnotes to remote repository",
+  inputSchema: {
+    type: "object",
+    properties: {
+      remote: { type: "string", description: "Remote name (default: origin)" }
+    }
+  }
+}
+```
+
+### xnotes_pull
+
+Pull notes from remote.
+
+```typescript
+{
+  name: "xnotes_pull",
+  description: "Pull xnotes from remote repository",
+  inputSchema: {
+    type: "object",
+    properties: {
+      remote: { type: "string", description: "Remote name (default: origin)" }
+    }
+  }
+}
+```
+
+---
+
+## Library API
+
+### Constructor
+
+```typescript
+interface GitXNotesOptions {
+  gitDir: string;                  // Path to git repository (required)
+  notesRef?: string;               // Custom notes ref (default: "refs/notes/xnotes/comments")
+}
+
+class GitXNotes {
+  constructor(options: GitXNotesOptions);
+}
+```
+
+### Methods
+
+```typescript
+class GitXNotes {
+  // Write operations
+  addComment(params: AddCommentParams): Promise<Comment>;
+  editComment(id: string, params: EditCommentParams): Promise<Comment>;
+
+  // Read operations
+  getComment(id: string): Promise<CommentResponse>;
+  getComments(ids: string[]): Promise<CommentsResponse>;
+  getThread(id: string): Promise<ThreadResponse>;
+  getThreadsByCommit(commit: string): Promise<CommitThreadsResponse>;
+  getThreadsByCommits(commits: string[]): Promise<CommitsThreadsResponse>;
+  queryDiff(params: DiffQueryParams): Promise<DiffCommentsResponse>;
+  listAll(): Promise<AllCommentsResponse>;
+
+  // Sync operations
+  push(remote?: string): Promise<void>;
+  pull(remote?: string): Promise<void>;
+}
+```
+
+### Parameters
+
+```typescript
+interface AddCommentParams {
+  author: string;
+  description: string;
+  location?: Location;
+  parent?: string;                 // For thread replies
+  status?: ThreadStatus;
+  category?: Category;
+  severity?: Severity;
+}
+
+interface EditCommentParams {
+  description?: string;
+  status?: ThreadStatus;
+  category?: Category;
+  severity?: Severity;
+}
+
+interface DiffQueryParams {
+  base: string;                    // Base branch/commit
+  target?: string;                 // Target branch/commit (default: HEAD)
+}
+```
+
+---
+
 ## Git Notes Storage
 
 ### Ref
@@ -33,7 +374,8 @@ Multiple comments can exist per note (one JSON per line).
 ```typescript
 interface Comment {
   id: string;                      // ULID (Universally Unique Lexicographically Sortable Identifier)
-  timestamp: string;               // Unix timestamp
+  createdAt: string;               // Unix timestamp - original creation time
+  updatedAt: string;               // Unix timestamp - last edit time (same as createdAt if no edits)
   author: string;                  // Agent ID (e.g., "security-reviewer", "style-checker")
   original?: string;               // ID of comment being edited (for edits)
   parent?: string;                 // ID of parent comment (for thread replies)
@@ -42,7 +384,6 @@ interface Comment {
   status?: ThreadStatus;           // Sets thread status when present
   category?: Category;             // Comment category
   severity?: Severity;             // Comment severity
-  v: number;                       // Schema version (0)
 }
 
 type ThreadStatus = "open" | "resolved" | "dismissed";
@@ -73,7 +414,7 @@ interface Range {
 interface Thread {
   id: string;                      // Root comment ID
   location?: Location;
-  comments: Comment[];             // Ordered by timestamp
+  comments: Comment[];             // Ordered by createdAt
   status: ThreadStatus;            // Latest status from comments, default "open"
 }
 ```
@@ -103,6 +444,8 @@ type XNotesResponse =
   | CommentResponse
   | CommentsResponse
   | ThreadResponse
+  | CommitThreadsResponse
+  | CommitsThreadsResponse
   | AllCommentsResponse;
 ```
 
@@ -167,6 +510,32 @@ interface ThreadResponse {
 }
 ```
 
+### CommitThreadsResponse
+
+Returns all threads for a specific commit.
+
+```typescript
+interface CommitThreadsResponse {
+  type: "commit_threads";
+  commit: string;                  // Commit SHA
+  threads: Thread[];
+}
+```
+
+### CommitsThreadsResponse
+
+Returns all threads for multiple commits.
+
+```typescript
+interface CommitsThreadsResponse {
+  type: "commits_threads";
+  commits: {
+    commit: string;
+    threads: Thread[];
+  }[];
+}
+```
+
 ### AllCommentsResponse
 
 Returns all comments without filtering.
@@ -209,6 +578,47 @@ interface AllCommentsResponse {
 - New comment with `original` pointing to old comment
 - Old comment remains in history
 - Latest comment in `original` chain is displayed
+
+#### Edit Timestamp Behavior
+
+| Field | Original Comment | Edited Comment |
+|-------|------------------|----------------|
+| `createdAt` | Creation time | **Inherited from original** |
+| `updatedAt` | Same as createdAt | Edit time |
+
+When resolving edits for display:
+- Use `createdAt` from **root** of edit chain (original comment)
+- Use `updatedAt` from **latest** edit
+- Use `location`/`parent` from **root**
+- Use `description`/`category`/`severity`/`status` from **latest**
+
+#### Example
+
+```json
+// Original comment
+{
+  "id": "01HXK001...",
+  "createdAt": "1706745600",
+  "updatedAt": "1706745600",
+  "author": "security-reviewer",
+  "description": "Potential SQL injection",
+  "severity": "warning",
+  "location": { "commit": "abc123", "path": "src/db.ts", "range": { "startLine": 42 } }
+}
+
+// Edited comment (stored separately)
+{
+  "id": "01HXK002...",
+  "createdAt": "1706745600",
+  "updatedAt": "1706746000",
+  "author": "security-reviewer",
+  "original": "01HXK001...",
+  "description": "Confirmed SQL injection - user input not sanitized",
+  "severity": "error"
+}
+```
+
+Note: Edited comment omits `location` - inherited from original.
 
 ### Thread via `parent` Field
 
