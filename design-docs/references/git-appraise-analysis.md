@@ -145,6 +145,65 @@ Status values: `"lgtm"` | `"fyi"` | `"nmw"` (needs more work)
 7. `git appraise accept` when approved
 8. `git appraise submit --merge` to merge to target branch
 
+## Submit Command Details
+
+The `git appraise submit` command merges an accepted review into the target branch.
+
+### Available Flags
+
+| Flag | Description |
+|------|-------------|
+| `--merge` | Create a merge commit (non-fast-forward) |
+| `--rebase` | Rebase the source ref onto the target ref |
+| `--fast-forward` | Fast-forward merge only |
+| `--tbr` | "To be reviewed" - force submission without acceptance |
+| `--archive` | Prevent original commit from being garbage collected (rebase only) |
+| `-S` | Sign the merge commit |
+
+### Execution Flow
+
+1. **Validation checks**:
+   - Review must not already be submitted
+   - Review must be accepted (`resolved = true`), unless `--tbr` flag is used
+   - Target branch must be a valid git ref
+   - Source must be a descendant of target (fast-forward capable)
+
+2. **Switch to target branch**:
+   ```go
+   repo.SwitchToRef(target)  // e.g., switch to "main"
+   ```
+
+3. **Perform merge** (behavior depends on flags):
+
+   With `--merge`:
+   ```go
+   repo.MergeRef(source, false, submitMessage, r.Request.Description)
+   ```
+   Executes:
+   ```bash
+   git merge --no-ff -e -m "Submitting review <revision-hash>
+
+   <review description>" <source-branch>
+   ```
+
+   With `--fast-forward` (or no flag):
+   ```bash
+   git merge --ff --ff-only <source-branch>
+   ```
+
+### Merge Strategy Comparison
+
+| Flag | Git Command | Result |
+|------|-------------|--------|
+| `--merge` | `git merge --no-ff` | Creates a **merge commit** (bubble merge), preserves branch history |
+| `--rebase` | rebase + fast-forward | Linear history, no merge commit |
+| `--fast-forward` | `git merge --ff --ff-only` | Fast-forward only, no merge commit |
+
+### Source Code Reference
+
+- `commands/submit.go` - Submit command implementation
+- `repository/git.go:MergeRef()` - Git merge execution
+
 ## Key Design Decisions
 
 ### Why Single-Line JSON?
