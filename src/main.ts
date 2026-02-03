@@ -1,14 +1,13 @@
+#!/usr/bin/env bun
 /**
  * git-xnotes - Main entry point
  *
- * reviews in git notes
+ * Distributed code review annotations stored in git notes.
  */
 
-import { greet } from "./lib";
+import { main } from "./cli/index.js";
 
-function main(): void {
-  const message = greet("World");
-  console.log(message);
-}
-
-main();
+main().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});

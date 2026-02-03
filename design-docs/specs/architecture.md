@@ -1,633 +1,349 @@
 # Architecture Design
 
-This document describes system architecture and design decisions.
+This document describes system architecture and design decisions for git-xnotes.
 
 ## Overview
 
-git-xnotes is a tool for AI agents to leave code review comments stored in git notes.
-It does NOT manage review state or merge operations - only comments.
+git-xnotes is a distributed code review annotation system that stores review data as git notes. Inspired by git-appraise, it provides a modern TypeScript/Bun implementation with improved GitHub integration.
 
-## Usage Modes
+### Core Principles
 
-git-xnotes can be used in three modes:
-
-### 1. CLI Tool
-
-```bash
-git-xnotes --repo /path/to/repo query --base main --target feature/auth
-```
-
-### 2. Library (TypeScript)
-
-```typescript
-import { GitXNotes } from "git-xnotes";
-
-const xnotes = new GitXNotes({
-  gitDir: "/path/to/repo",        // Required: path to git repository
-});
-
-// Add comment
-await xnotes.addComment({
-  author: "security-reviewer",
-  description: "SQL injection risk",
-  location: { commit: "abc123", path: "src/db.ts", range: { startLine: 42 } },
-  category: "security",
-  severity: "error",
-});
-
-// Query comments
-const response = await xnotes.queryDiff({
-  base: "main",
-  target: "feature/auth",
-});
-```
-
-### 3. MCP Server (for AI Agents)
-
-```bash
-# Start MCP server
-git-xnotes mcp --repo /path/to/repo
-```
-
-MCP configuration (claude_desktop_config.json):
-```json
-{
-  "mcpServers": {
-    "git-xnotes": {
-      "command": "git-xnotes",
-      "args": ["mcp", "--repo", "/path/to/repo"]
-    }
-  }
-}
-```
+1. **Distributed Storage**: All review data stored in git notes, travels with the repository
+2. **No Server Required**: Works with any git hosting provider
+3. **Merge-Friendly Format**: Single-line JSON enables automatic merge via `cat_sort_uniq`
+4. **GitHub Integration**: First-class support for GitHub PR synchronization
 
 ---
 
-## MCP Tools
+## System Architecture
 
-git-xnotes exposes the following MCP tools for AI agents:
+### Layer Overview
 
-### xnotes_add_comment
-
-Add a new comment to the repository.
-
-```typescript
-{
-  name: "xnotes_add_comment",
-  description: "Add a code review comment to a git repository",
-  inputSchema: {
-    type: "object",
-    properties: {
-      author: { type: "string", description: "Agent ID" },
-      description: { type: "string", description: "Comment content" },
-      commit: { type: "string", description: "Commit SHA" },
-      path: { type: "string", description: "File path" },
-      startLine: { type: "number", description: "Start line number" },
-      endLine: { type: "number", description: "End line number (optional)" },
-      category: { type: "string", enum: ["bug", "security", "performance", "style", "logic", "suggestion"] },
-      severity: { type: "string", enum: ["error", "warning", "info"] },
-      parent: { type: "string", description: "Parent comment ID for thread reply (optional)" },
-      status: { type: "string", enum: ["open", "resolved", "dismissed"], description: "Set thread status (optional)" }
-    },
-    required: ["author", "description", "commit", "path", "startLine"]
-  }
-}
+```
++--------------------------------------------------+
+|                    CLI Layer                      |
+|  (Commander.js commands: request, comment, etc.) |
++--------------------------------------------------+
+                        |
++--------------------------------------------------+
+|                 Service Layer                     |
+|   (Business logic, validation, orchestration)    |
++--------------------------------------------------+
+          |                     |
++-----------------+    +------------------+
+|  Notes Layer    |    |  GitHub Layer    |
+| (git notes ops) |    |  (API sync)      |
++-----------------+    +------------------+
+          |                     |
++-----------------+    +------------------+
+|   Git Layer     |    |   HTTP Layer     |
+| (git commands)  |    |  (fetch/Octokit) |
++-----------------+    +------------------+
 ```
 
-### xnotes_edit_comment
+### Layer Responsibilities
 
-Edit an existing comment.
-
-```typescript
-{
-  name: "xnotes_edit_comment",
-  description: "Edit an existing code review comment",
-  inputSchema: {
-    type: "object",
-    properties: {
-      id: { type: "string", description: "Comment ID to edit" },
-      description: { type: "string", description: "Updated content" },
-      category: { type: "string", enum: ["bug", "security", "performance", "style", "logic", "suggestion"] },
-      severity: { type: "string", enum: ["error", "warning", "info"] },
-      status: { type: "string", enum: ["open", "resolved", "dismissed"] }
-    },
-    required: ["id"]
-  }
-}
-```
-
-### xnotes_query_diff
-
-Query comments for commits in a diff range.
-
-```typescript
-{
-  name: "xnotes_query_diff",
-  description: "Get all comments for commits between base and target",
-  inputSchema: {
-    type: "object",
-    properties: {
-      base: { type: "string", description: "Base branch or commit" },
-      target: { type: "string", description: "Target branch or commit (default: HEAD)" }
-    },
-    required: ["base"]
-  }
-}
-```
-
-### xnotes_get_comment
-
-Get a single comment by ID.
-
-```typescript
-{
-  name: "xnotes_get_comment",
-  description: "Get a comment by its ID",
-  inputSchema: {
-    type: "object",
-    properties: {
-      id: { type: "string", description: "Comment ID" }
-    },
-    required: ["id"]
-  }
-}
-```
-
-### xnotes_get_thread
-
-Get a thread by root comment ID.
-
-```typescript
-{
-  name: "xnotes_get_thread",
-  description: "Get a comment thread by root comment ID",
-  inputSchema: {
-    type: "object",
-    properties: {
-      id: { type: "string", description: "Root comment ID" }
-    },
-    required: ["id"]
-  }
-}
-```
-
-### xnotes_get_threads_by_commit
-
-Get all threads for a specific commit.
-
-```typescript
-{
-  name: "xnotes_get_threads_by_commit",
-  description: "Get all comment threads for a specific commit",
-  inputSchema: {
-    type: "object",
-    properties: {
-      commit: { type: "string", description: "Commit SHA" }
-    },
-    required: ["commit"]
-  }
-}
-```
-
-Response:
-```typescript
-interface CommitThreadsResponse {
-  type: "commit_threads";
-  commit: string;
-  threads: Thread[];
-}
-```
-
-### xnotes_get_threads_by_commits
-
-Get all threads for multiple commits.
-
-```typescript
-{
-  name: "xnotes_get_threads_by_commits",
-  description: "Get all comment threads for multiple commits",
-  inputSchema: {
-    type: "object",
-    properties: {
-      commits: {
-        type: "array",
-        items: { type: "string" },
-        description: "Array of commit SHAs"
-      }
-    },
-    required: ["commits"]
-  }
-}
-```
-
-Response:
-```typescript
-interface CommitsThreadsResponse {
-  type: "commits_threads";
-  commits: {
-    commit: string;
-    threads: Thread[];
-  }[];
-}
-```
-
-### xnotes_list_all
-
-List all comments in the repository.
-
-```typescript
-{
-  name: "xnotes_list_all",
-  description: "List all comments in the repository",
-  inputSchema: {
-    type: "object",
-    properties: {}
-  }
-}
-```
-
-### xnotes_push
-
-Push notes to remote.
-
-```typescript
-{
-  name: "xnotes_push",
-  description: "Push xnotes to remote repository",
-  inputSchema: {
-    type: "object",
-    properties: {
-      remote: { type: "string", description: "Remote name (default: origin)" }
-    }
-  }
-}
-```
-
-### xnotes_pull
-
-Pull notes from remote.
-
-```typescript
-{
-  name: "xnotes_pull",
-  description: "Pull xnotes from remote repository",
-  inputSchema: {
-    type: "object",
-    properties: {
-      remote: { type: "string", description: "Remote name (default: origin)" }
-    }
-  }
-}
-```
+| Layer | Responsibility | Dependencies |
+|-------|----------------|--------------|
+| CLI | Parse arguments, invoke services, format output | Service |
+| Service | Business logic, validation, cross-layer coordination | Notes, GitHub |
+| Notes | Read/write git notes, JSON serialization | Git |
+| GitHub | PR sync, comment mirroring, API operations | HTTP |
+| Git | Execute git commands, parse output | Process (Bun) |
+| HTTP | HTTP requests, authentication | fetch/Octokit |
 
 ---
 
-## Library API
+## Git Notes Schema
 
-### Constructor
+### Notes References
 
-```typescript
-interface GitXNotesOptions {
-  gitDir: string;                  // Path to git repository (required)
-  notesRef?: string;               // Custom notes ref (default: "refs/notes/xnotes/comments")
-}
+| Ref | Purpose | Annotates |
+|-----|---------|-----------|
+| `refs/notes/xnotes/reviews` | Review requests | First commit in review |
+| `refs/notes/xnotes/discuss` | Human comments | First commit in review |
+| `refs/notes/xnotes/ci` | CI build results | Tested revision |
+| `refs/notes/xnotes/analyses` | Robot/static analysis | Analyzed revision |
 
-class GitXNotes {
-  constructor(options: GitXNotesOptions);
-}
-```
+### Data Format
 
-### Methods
-
-```typescript
-class GitXNotes {
-  // Write operations
-  addComment(params: AddCommentParams): Promise<Comment>;
-  editComment(id: string, params: EditCommentParams): Promise<Comment>;
-
-  // Read operations
-  getComment(id: string): Promise<CommentResponse>;
-  getComments(ids: string[]): Promise<CommentsResponse>;
-  getThread(id: string): Promise<ThreadResponse>;
-  getThreadsByCommit(commit: string): Promise<CommitThreadsResponse>;
-  getThreadsByCommits(commits: string[]): Promise<CommitsThreadsResponse>;
-  queryDiff(params: DiffQueryParams): Promise<DiffCommentsResponse>;
-  listAll(): Promise<AllCommentsResponse>;
-
-  // Sync operations
-  push(remote?: string): Promise<void>;
-  pull(remote?: string): Promise<void>;
-}
-```
-
-### Parameters
-
-```typescript
-interface AddCommentParams {
-  author: string;
-  description: string;
-  location?: Location;
-  parent?: string;                 // For thread replies
-  status?: ThreadStatus;
-  category?: Category;
-  severity?: Severity;
-}
-
-interface EditCommentParams {
-  description?: string;
-  status?: ThreadStatus;
-  category?: Category;
-  severity?: Severity;
-}
-
-interface DiffQueryParams {
-  base: string;                    // Base branch/commit
-  target?: string;                 // Target branch/commit (default: HEAD)
-}
-```
+Each note entry is a **single line of JSON**. Multiple entries per note are allowed (one per line). This format enables automatic merging using git's `cat_sort_uniq` notes merge strategy.
 
 ---
 
-## Git Notes Storage
+## Core Data Types
 
-### Ref
+### Review Request
 
+```typescript
+interface ReviewRequest {
+  timestamp: string;        // Unix timestamp
+  requester: string;        // Email address
+  baseCommit?: string;      // Base commit hash
+  reviewRef: string;        // Source branch ref
+  targetRef: string;        // Target branch ref (e.g., refs/heads/main)
+  reviewers?: string[];     // Reviewer email addresses
+  description?: string;     // Review description
+  alias?: string;           // Alternate commit hash
+  resolved?: boolean;       // Review accepted/rejected
+  submitted?: boolean;      // Merged to target
+  v: number;                // Schema version (0)
+}
 ```
-refs/notes/xnotes/comments
-```
 
-Single ref approach for simplicity.
+Required fields: `timestamp`, `requester`, `reviewRef`, `targetRef`, `v`
 
-### Storage Format
-
-Each comment is stored as a **single-line JSON** in git notes.
-This enables automatic merging using git's `cat_sort_uniq` notes merge strategy.
-
-Multiple comments can exist per note (one JSON per line).
-
----
-
-## Data Schema
-
-### Comment (Storage)
+### Comment
 
 ```typescript
 interface Comment {
-  id: string;                      // ULID (Universally Unique Lexicographically Sortable Identifier)
-  createdAt: string;               // Unix timestamp - original creation time
-  updatedAt: string;               // Unix timestamp - last edit time (same as createdAt if no edits)
-  author: string;                  // Agent ID (e.g., "security-reviewer", "style-checker")
-  original?: string;               // ID of comment being edited (for edits)
-  parent?: string;                 // ID of parent comment (for thread replies)
-  location?: Location;             // File/line location (optional for general comments)
-  description: string;             // Comment content
-  status?: ThreadStatus;           // Sets thread status when present
-  category?: Category;             // Comment category
-  severity?: Severity;             // Comment severity
+  timestamp: string;        // Unix timestamp
+  author: string;           // Email address
+  description: string;      // Comment text
+  parent?: string;          // SHA1 of parent comment (for replies)
+  original?: string;        // SHA1 of original comment (for edits)
+  resolved?: boolean;       // Thread resolved status
+  location?: CommentLocation;  // Inline comment location
+  v: number;                // Schema version (0)
 }
 
-type ThreadStatus = "open" | "resolved" | "dismissed";
-type Category = "bug" | "security" | "performance" | "style" | "logic" | "suggestion";
-type Severity = "error" | "warning" | "info";
-```
-
-### Location
-
-```typescript
-interface Location {
-  commit: string;                  // Commit SHA this comment refers to
-  path: string;                    // File path
-  range?: Range;                   // Line range (optional)
+interface CommentLocation {
+  commit: string;           // Commit hash this comment applies to
+  path: string;             // File path
+  range?: LineRange;        // Line range
 }
 
-interface Range {
+interface LineRange {
   startLine: number;
   startColumn?: number;
-  endLine?: number;
+  endLine: number;
   endColumn?: number;
 }
 ```
 
-### Thread (Computed from Comments)
+Required fields: `timestamp`, `author`, `description`, `v`
+
+### CI Result
 
 ```typescript
-interface Thread {
-  id: string;                      // Root comment ID
-  location?: Location;
-  comments: Comment[];             // Ordered by createdAt
-  status: ThreadStatus;            // Latest status from comments, default "open"
+interface CIResult {
+  timestamp: string;        // Unix timestamp
+  agent: string;            // CI system identifier
+  status: CIStatus;         // Build status
+  url?: string;             // Link to CI build
+  v: number;                // Schema version (0)
 }
+
+type CIStatus = 'success' | 'failure' | 'pending';
+```
+
+Required fields: `timestamp`, `agent`, `status`, `v`
+
+### Analysis Result
+
+```typescript
+interface AnalysisResult {
+  timestamp: string;        // Unix timestamp
+  url: string;              // Link to analysis results
+  status: AnalysisStatus;   // Analysis verdict
+  v: number;                // Schema version (0)
+}
+
+type AnalysisStatus = 'lgtm' | 'fyi' | 'nmw';  // "needs more work"
+```
+
+Required fields: `timestamp`, `url`, `status`, `v`
+
+---
+
+## Directory Structure
+
+```
+src/
+├── cli/                    # CLI commands
+│   ├── index.ts            # Main CLI entry point
+│   ├── commands/           # Individual command handlers
+│   │   ├── request.ts      # Create review request
+│   │   ├── list.ts         # List reviews
+│   │   ├── show.ts         # Show review details
+│   │   ├── comment.ts      # Add comment
+│   │   ├── accept.ts       # Accept review
+│   │   ├── reject.ts       # Reject review
+│   │   ├── submit.ts       # Merge review
+│   │   ├── abandon.ts      # Abandon review
+│   │   ├── push.ts         # Push notes
+│   │   └── pull.ts         # Pull notes
+│   └── formatters/         # Output formatting
+├── services/               # Business logic
+│   ├── review.ts           # Review management
+│   ├── comment.ts          # Comment management
+│   └── sync.ts             # GitHub sync
+├── notes/                  # Git notes operations
+│   ├── reader.ts           # Read notes
+│   ├── writer.ts           # Write notes
+│   ├── merger.ts           # Merge strategies
+│   └── refs.ts             # Reference management
+├── github/                 # GitHub integration
+│   ├── client.ts           # API client
+│   ├── pr.ts               # PR operations
+│   └── sync.ts             # Bidirectional sync
+├── git/                    # Git command execution
+│   ├── commands.ts         # Git command wrappers
+│   └── parser.ts           # Output parsing
+├── types/                  # Shared type definitions
+│   ├── review.ts           # Review types
+│   ├── comment.ts          # Comment types
+│   ├── ci.ts               # CI types
+│   └── analysis.ts         # Analysis types
+└── utils/                  # Utilities
+    ├── json.ts             # JSON serialization
+    ├── sha.ts              # SHA1 computation
+    └── timestamp.ts        # Timestamp handling
 ```
 
 ---
 
-## Thread Status
+## Key Design Decisions
 
-| Status | Meaning |
-|--------|---------|
-| `open` | Default. Discussion ongoing, needs action |
-| `resolved` | Issue addressed/fixed |
-| `dismissed` | Won't fix, not applicable, or false positive |
+### Single-Line JSON Format
 
-Status is updated by adding a comment with `status` field set.
-The latest `status` in the thread determines the current thread status.
+**Decision**: Store each data entry as a single line of JSON.
 
----
+**Rationale**:
+- Enables `cat_sort_uniq` merge strategy for concurrent edits
+- Git automatically handles conflicts by concatenating and deduplicating
+- Simple parsing: split by newline, parse each line
 
-## Response Schema
+### Comment Threading via SHA1 References
 
-### Union Type
+**Decision**: Use SHA1 hash of comment content for `parent` references.
 
-```typescript
-type XNotesResponse =
-  | DiffCommentsResponse
-  | CommentResponse
-  | CommentsResponse
-  | ThreadResponse
-  | CommitThreadsResponse
-  | CommitsThreadsResponse
-  | AllCommentsResponse;
-```
+**Rationale**:
+- Creates tree structure for threaded discussions
+- SHA1 is deterministic and content-addressable
+- No central ID generation required
 
-### DiffCommentsResponse
+### Comment Editing via Original Field
 
-Returns comments for commits in the diff between base and target.
+**Decision**: Edits create new comments with `original` pointing to the edited comment.
 
-```typescript
-interface DiffCommentsResponse {
-  type: "diff_comments";
-  base: string;                    // Base branch/commit (e.g., "main", "abc123")
-  target: string;                  // Target branch/commit (e.g., "feature/auth", "def456")
-  diffRange: string;               // e.g., "main..feature/auth"
-  commits: CommitComments[];       // Comments grouped by commit in diff
-  threads: Thread[];               // Threaded view
-  summary: {
-    totalComments: number;
-    unresolvedThreads: number;
-    bySeverity: Record<Severity, number>;
-    byCategory: Record<Category, number>;
-  };
-}
-
-interface CommitComments {
-  commit: string;                  // Commit SHA
-  comments: Comment[];
-}
-```
-
-### CommentResponse
-
-Returns a single comment by ID.
-
-```typescript
-interface CommentResponse {
-  type: "comment";
-  comment: Comment;
-  thread?: Thread;                 // Include parent thread if exists
-}
-```
-
-### CommentsResponse
-
-Returns multiple comments by IDs.
-
-```typescript
-interface CommentsResponse {
-  type: "comments";
-  comments: Comment[];
-  notFound: string[];              // IDs that were not found
-}
-```
-
-### ThreadResponse
-
-Returns a single thread by root comment ID.
-
-```typescript
-interface ThreadResponse {
-  type: "thread";
-  thread: Thread;
-}
-```
-
-### CommitThreadsResponse
-
-Returns all threads for a specific commit.
-
-```typescript
-interface CommitThreadsResponse {
-  type: "commit_threads";
-  commit: string;                  // Commit SHA
-  threads: Thread[];
-}
-```
-
-### CommitsThreadsResponse
-
-Returns all threads for multiple commits.
-
-```typescript
-interface CommitsThreadsResponse {
-  type: "commits_threads";
-  commits: {
-    commit: string;
-    threads: Thread[];
-  }[];
-}
-```
-
-### AllCommentsResponse
-
-Returns all comments without filtering.
-
-```typescript
-interface AllCommentsResponse {
-  type: "all_comments";
-  ref: string;                     // e.g., "refs/notes/xnotes/comments"
-  comments: Comment[];
-  threads: Thread[];
-}
-```
-
----
-
-## Design Decisions
-
-### Why ULID for Comment ID?
-
-- Sortable by creation time (unlike UUID v4)
-- Lexicographically sortable (can use string comparison)
-- Contains timestamp information
-- 128-bit compatible with UUID
-
-### Why Single-Line JSON?
-
-- Enables git's `cat_sort_uniq` merge strategy
-- Multiple agents can add comments concurrently
-- Git automatically handles merge conflicts by concatenating and deduplicating
-
-### Why Single Ref?
-
-- Simpler implementation
-- Only storing comments (no CI, no review requests)
-- Can always split later if needed
-
-### Comment Editing via `original` Field
-
-- Immutable data pattern - nothing is deleted
-- New comment with `original` pointing to old comment
-- Old comment remains in history
+**Rationale**:
+- Preserves edit history
+- Immutable data model
 - Latest comment in `original` chain is displayed
 
-#### Edit Timestamp Behavior
+### Separate Notes Refs per Data Type
 
-| Field | Original Comment | Edited Comment |
-|-------|------------------|----------------|
-| `createdAt` | Creation time | **Inherited from original** |
-| `updatedAt` | Same as createdAt | Edit time |
+**Decision**: Use separate git notes refs for reviews, comments, CI, and analyses.
 
-When resolving edits for display:
-- Use `createdAt` from **root** of edit chain (original comment)
-- Use `updatedAt` from **latest** edit
-- Use `location`/`parent` from **root**
-- Use `description`/`category`/`severity`/`status` from **latest**
+**Rationale**:
+- Clear separation of concerns
+- Selective sync (can pull only reviews, not all data)
+- Simpler querying per data type
 
-#### Example
+---
 
-```json
-// Original comment
-{
-  "id": "01HXK001...",
-  "createdAt": "1706745600",
-  "updatedAt": "1706745600",
-  "author": "security-reviewer",
-  "description": "Potential SQL injection",
-  "severity": "warning",
-  "location": { "commit": "abc123", "path": "src/db.ts", "range": { "startLine": 42 } }
-}
+## GitHub Integration (Phase 2)
 
-// Edited comment (stored separately)
-{
-  "id": "01HXK002...",
-  "createdAt": "1706745600",
-  "updatedAt": "1706746000",
-  "author": "security-reviewer",
-  "original": "01HXK001...",
-  "description": "Confirmed SQL injection - user input not sanitized",
-  "severity": "error"
+### Synchronization Strategy
+
+```
+GitHub PR <---> git-xnotes
+   |               |
+   |-- Comments -->|  (mirror PR comments to notes)
+   |<-- Comments --|  (mirror notes comments to PR)
+   |-- Status ---->|  (sync PR approval state)
+   |<-- Submit ----|  (trigger PR merge)
+```
+
+### Sync Modes
+
+| Mode | Description |
+|------|-------------|
+| `pull` | Import PR data to git notes |
+| `push` | Export git notes to PR comments |
+| `bidirectional` | Full two-way sync |
+
+---
+
+## Error Handling
+
+### Error Categories
+
+| Category | HTTP-like Code | Example |
+|----------|---------------|---------|
+| ValidationError | 400 | Invalid review request format |
+| NotFoundError | 404 | Review not found |
+| ConflictError | 409 | Review already submitted |
+| GitError | 500 | Git command failed |
+| NetworkError | 503 | GitHub API unavailable |
+
+### Error Response Format
+
+```typescript
+interface XNotesError {
+  code: string;           // Machine-readable error code
+  message: string;        // Human-readable message
+  details?: unknown;      // Additional context
 }
 ```
 
-Note: Edited comment omits `location` - inherited from original.
+---
 
-### Thread via `parent` Field
+## Configuration
 
-- Creates tree structure for discussions
-- Agents can reply to each other's comments
-- Root comment (no `parent`) defines the thread
+### Git Config
+
+```ini
+[xnotes]
+  user = user@example.com
+  github-token = ghp_xxx  # Optional, for GitHub sync
+  notes-ref-prefix = refs/notes/xnotes
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `XNOTES_USER` | Override git config user |
+| `GITHUB_TOKEN` | GitHub API token |
+| `XNOTES_DEBUG` | Enable debug logging |
+
+---
+
+## Implementation Phases
+
+### Phase 1: Core Local Operations
+
+- Git notes read/write operations
+- Data type schemas and validation
+- Basic CLI commands (request, list, show, comment)
+- Notes push/pull
+
+### Phase 2: Review Workflow
+
+- Accept/reject commands
+- Submit (merge) command
+- Review state machine
+- Comment threading and resolution
+
+### Phase 3: GitHub Integration
+
+- GitHub API client
+- PR comment sync
+- Bidirectional synchronization
+- Status checks integration
+
+### Phase 4: Advanced Features
+
+- Analysis results integration
+- CI status tracking
+- Web UI (optional)
+- IDE plugins (optional)
 
 ---
 
 ## References
 
-- [git-appraise Analysis](../references/git-appraise-analysis.md) - Design inspiration from Google's git-appraise
+- [git-appraise Analysis](../references/git-appraise-analysis.md)
+- [Git Notes Documentation](https://git-scm.com/docs/git-notes)
