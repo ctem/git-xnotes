@@ -3,11 +3,19 @@
   "version": "0.1.0",
   "description": "reviews in git notes",
   "type": "module",
-  "main": "dist/main.js",
-  "module": "dist/main.js",
-  "types": "dist/main.d.ts",
+  "main": "dist/lib.js",
+  "module": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "bin": {
+    "git-xnotes": "./dist/main.js"
+  },
   "exports": {
     ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js",
+      "default": "./dist/lib.js"
+    },
+    "./cli": {
       "types": "./dist/main.d.ts",
       "import": "./dist/main.js",
       "default": "./dist/main.js"
@@ -15,7 +23,9 @@
   },
   "scripts": {
     "dev": "bun run --watch src/main.ts",
-    "build": "bun build src/main.ts --outdir dist --target bun",
+    "build": "bun build src/main.ts src/lib.ts --outdir dist --target bun && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build:cli": "bun build src/main.ts --outdir dist --target bun",
+    "build:lib": "bun build src/lib.ts --outdir dist --target bun && tsc --emitDeclarationOnly --declaration --outDir dist",
     "start": "bun run src/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
