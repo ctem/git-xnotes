@@ -1,7 +1,7 @@
 {
   "name": "git-xnotes",
   "version": "0.1.0",
-  "description": "reviews in git notes",
+  "description": "distributed comments in git notes",
   "type": "module",
   "main": "dist/lib.js",
   "module": "dist/lib.js",
@@ -39,7 +39,7 @@
   "homepage": "https://github.com/tacogips/git-xnotes",
   "repository": {
     "type": "git",
-    "url": "https://github.com/user/repo"
+    "url": "https://github.com/tacogips/git-xnotes"
   },
   "license": "MIT",
   "trustedDependencies": [],

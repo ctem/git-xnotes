@@ -14,119 +14,50 @@ Implementation plans bridge design documents (what to build) and actual code (ho
 
 ```
 impl-plans/
-├── README.md              # This file
-├── PROGRESS.json          # Task status index (CRITICAL for impl-exec-auto)
-├── active/                # Currently active implementation plans
-│   └── <feature>.md       # One file per feature being implemented
-├── completed/             # Completed implementation plans (archive)
-│   └── <feature>.md       # Completed plans for reference
-└── templates/             # Plan templates
-    └── plan-template.md   # Standard plan template
++-- README.md              # This file
++-- active/                # Currently active implementation plans
+|   +-- <feature>.md       # One file per feature being implemented
++-- archived/              # Archived implementation plans (obsolete/superseded)
+|   +-- <feature>.md       # Plans no longer applicable
++-- completed/             # Completed implementation plans (archive)
+|   +-- <feature>.md       # Completed plans for reference
++-- templates/             # Plan templates
+    +-- plan-template.md   # Standard plan template
 ```
-
-## PROGRESS.json (Task Status Index)
-
-**CRITICAL**: `PROGRESS.json` is the central task status index used by `impl-exec-auto`.
-
-Reading all plan files at once causes context overflow (>200K tokens). Instead:
-1. `impl-exec-auto` reads only `PROGRESS.json` (~2K tokens)
-2. Identifies executable tasks from this index
-3. Reads specific plan files only when executing tasks
-4. Updates BOTH the plan file AND `PROGRESS.json` after each task
-
-### Structure
-
-```json
-{
-  "lastUpdated": "2026-01-06T16:00:00Z",
-  "phases": {
-    "1": { "status": "COMPLETED" },
-    "2": { "status": "READY" }
-  },
-  "plans": {
-    "plan-name": {
-      "phase": 2,
-      "status": "Ready",
-      "tasks": {
-        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [] },
-        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [] }
-      }
-    }
-  }
-}
-```
-
-### Keeping PROGRESS.json in Sync
-
-After ANY task status change:
-1. Edit the task status in `PROGRESS.json`
-2. Update `lastUpdated` timestamp
-3. Edit the task status in the plan file
-
-## File Size Limits
-
-**IMPORTANT**: Implementation plan files must stay under 400 lines to prevent OOM errors.
-
-| Metric | Limit |
-|--------|-------|
-| Line count | MAX 400 lines |
-| Modules per plan | MAX 8 modules |
-| Tasks per plan | MAX 10 tasks |
-
-Large features are split into multiple related plans with cross-references.
 
 ## Active Plans
 
 | Plan | Status | Design Reference | Last Updated |
 |------|--------|------------------|--------------|
-| phase3-github | Ready | architecture.md#github-integration | 2026-02-03 |
-| phase4-advanced | Blocked | architecture.md#implementation-phases | 2026-02-01 |
+| phase1-core-types | Completed | architecture.md#core-data-types | 2026-02-01 |
+| phase1-git-layer | Completed | notes.md#git-notes-operations | 2026-02-01 |
+| phase1-notes-layer | Completed | notes.md | 2026-02-01 |
+| phase1-cli-basic | Completed | command.md | 2026-02-01 |
+| phase3-github | Completed | architecture.md#github-integration | 2026-02-03 |
 
-## Completed Plans
+## Archived Plans
 
-| Plan | Completed | Design Reference |
-|------|-----------|------------------|
-| phase1-core-types | 2026-02-01 | architecture.md#core-data-types |
-| phase1-git-layer | 2026-02-01 | notes.md#git-notes-operations |
-| phase1-notes-layer | 2026-02-01 | notes.md |
-| phase1-cli-basic | 2026-02-01 | command.md |
-| phase2-review-workflow | 2026-02-03 | command.md#review-actions |
+Plans that were superseded when the project scope was simplified to comments-only:
 
-## Phase Dependencies (for impl-exec-auto)
+| Plan | Reason | Date |
+|------|--------|------|
+| phase2-review-workflow | Review workflow removed | 2026-02-03 |
+| phase4-advanced | CI/Analysis features removed | 2026-02-03 |
 
-**IMPORTANT**: This section is used by impl-exec-auto to determine which plans to load.
-Only plans from eligible phases should be read to minimize context loading.
+## Current Scope
 
-### Phase Status
+git-xnotes has been simplified to focus on comment functionality:
 
-| Phase | Status | Depends On |
-|-------|--------|------------|
-| 1 | COMPLETED | - |
-| 2 | COMPLETED | Phase 1 |
-| 3 | READY | Phase 2 |
-| 4 | BLOCKED | Phase 3 |
+**Commands**:
+- `comment` - Add comment to any commit
+- `list` - List commits with comments
+- `show` - Show comments for a commit
+- `push/pull` - Sync notes with remote
+- `sync` - Sync with GitHub PR comments
+- `config` - Configuration management
 
-### Phase to Plans Mapping
-
-```
-PHASE_TO_PLANS = {
-  1: [
-    "active/phase1-core-types.md",
-    "active/phase1-git-layer.md",
-    "active/phase1-notes-layer.md",
-    "active/phase1-cli-basic.md"
-  ],
-  2: [
-    "active/phase2-review-workflow.md"
-  ],
-  3: [
-    "active/phase3-github.md"
-  ],
-  4: [
-    "active/phase4-advanced.md"
-  ]
-}
-```
+**Notes Ref**:
+- `refs/notes/xnotes/discuss` - Comment storage
 
 ## Workflow
 
@@ -136,25 +67,22 @@ PHASE_TO_PLANS = {
 2. Or manually create a plan using `templates/plan-template.md`
 3. Save to `active/<feature-name>.md`
 4. Update this README with the new plan entry
-5. **IMPORTANT**: Update `PROGRESS.json` with the new plan and its tasks
-6. **IMPORTANT**: If plan exceeds 400 lines, split into multiple files
+5. **IMPORTANT**: If plan exceeds 400 lines, split into multiple files
 
 ### Working on a Plan
 
-1. Read `PROGRESS.json` to check task status
-2. Read the active plan for task details
-3. Select a subtask to work on (consider dependencies)
-4. Implement following the deliverable specifications
-5. Update task status in BOTH the plan file AND `PROGRESS.json`
-6. Mark completion criteria as done
+1. Read the active plan for task details
+2. Select a subtask to work on (consider dependencies)
+3. Implement following the deliverable specifications
+4. Update task status in the plan file
+5. Mark completion criteria as done
 
 ### Completing a Plan
 
 1. Verify all completion criteria are met
-2. Update status to "Completed" in both plan and PROGRESS.json
+2. Update status to "Completed"
 3. Move file from `active/` to `completed/`
 4. Update this README
-5. Update PROGRESS.json (remove or mark plan as completed)
 
 ## Guidelines
 
@@ -163,4 +91,3 @@ PHASE_TO_PLANS = {
 - Subtasks should be as independent as possible for parallel execution
 - Always update progress log after each session
 - **Keep each plan file under 400 lines** - split if necessary
-- **Always keep PROGRESS.json in sync** with plan file statuses

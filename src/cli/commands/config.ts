@@ -16,7 +16,6 @@ const VALID_KEYS: (keyof XNotesConfig)[] = [
   "user",
   "githubToken",
   "notesRefPrefix",
-  "defaultTarget",
   "debug",
 ];
 

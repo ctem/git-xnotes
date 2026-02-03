@@ -17,65 +17,49 @@ describe("NOTES_REF_PREFIX", () => {
 });
 
 describe("NOTES_REFS", () => {
-  test("has all expected refs", () => {
-    expect(NOTES_REFS.reviews).toBe("refs/notes/xnotes/reviews");
+  test("has discuss ref", () => {
     expect(NOTES_REFS.discuss).toBe("refs/notes/xnotes/discuss");
-    expect(NOTES_REFS.ci).toBe("refs/notes/xnotes/ci");
-    expect(NOTES_REFS.analyses).toBe("refs/notes/xnotes/analyses");
   });
 });
 
 describe("ALL_REF_TYPES", () => {
-  test("contains all ref types", () => {
-    expect(ALL_REF_TYPES).toContain("reviews");
+  test("contains only discuss ref type", () => {
     expect(ALL_REF_TYPES).toContain("discuss");
-    expect(ALL_REF_TYPES).toContain("ci");
-    expect(ALL_REF_TYPES).toContain("analyses");
-    expect(ALL_REF_TYPES).toHaveLength(4);
+    expect(ALL_REF_TYPES).toHaveLength(1);
   });
 });
 
 describe("getNotesRef", () => {
-  test("returns correct ref for each type", () => {
-    expect(getNotesRef("reviews")).toBe("refs/notes/xnotes/reviews");
+  test("returns correct ref for discuss", () => {
     expect(getNotesRef("discuss")).toBe("refs/notes/xnotes/discuss");
-    expect(getNotesRef("ci")).toBe("refs/notes/xnotes/ci");
-    expect(getNotesRef("analyses")).toBe("refs/notes/xnotes/analyses");
   });
 });
 
 describe("getAllNotesRefs", () => {
   test("returns all refs", () => {
     const refs = getAllNotesRefs();
-    expect(refs).toHaveLength(4);
-    expect(refs).toContain("refs/notes/xnotes/reviews");
+    expect(refs).toHaveLength(1);
     expect(refs).toContain("refs/notes/xnotes/discuss");
-    expect(refs).toContain("refs/notes/xnotes/ci");
-    expect(refs).toContain("refs/notes/xnotes/analyses");
   });
 });
 
 describe("getRemoteNotesRef", () => {
   test("returns remote ref with default origin", () => {
-    expect(getRemoteNotesRef("reviews")).toBe("origin/refs/notes/xnotes/reviews");
     expect(getRemoteNotesRef("discuss")).toBe("origin/refs/notes/xnotes/discuss");
   });
 
   test("returns remote ref with custom remote", () => {
-    expect(getRemoteNotesRef("reviews", "upstream")).toBe("upstream/refs/notes/xnotes/reviews");
+    expect(getRemoteNotesRef("discuss", "upstream")).toBe("upstream/refs/notes/xnotes/discuss");
   });
 });
 
 describe("parseNotesRef", () => {
   test("parses exact ref path", () => {
-    expect(parseNotesRef("refs/notes/xnotes/reviews")).toBe("reviews");
     expect(parseNotesRef("refs/notes/xnotes/discuss")).toBe("discuss");
-    expect(parseNotesRef("refs/notes/xnotes/ci")).toBe("ci");
-    expect(parseNotesRef("refs/notes/xnotes/analyses")).toBe("analyses");
   });
 
   test("parses remote ref path", () => {
-    expect(parseNotesRef("origin/refs/notes/xnotes/reviews")).toBe("reviews");
+    expect(parseNotesRef("origin/refs/notes/xnotes/discuss")).toBe("discuss");
     expect(parseNotesRef("upstream/refs/notes/xnotes/discuss")).toBe("discuss");
   });
 
@@ -88,9 +72,8 @@ describe("parseNotesRef", () => {
 
 describe("isNotesRef", () => {
   test("returns true for valid xnotes refs", () => {
-    expect(isNotesRef("refs/notes/xnotes/reviews")).toBe(true);
     expect(isNotesRef("refs/notes/xnotes/discuss")).toBe(true);
-    expect(isNotesRef("origin/refs/notes/xnotes/ci")).toBe(true);
+    expect(isNotesRef("origin/refs/notes/xnotes/discuss")).toBe(true);
   });
 
   test("returns false for invalid refs", () => {

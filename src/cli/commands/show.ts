@@ -1,22 +1,20 @@
 /**
- * Show command - show review details
+ * Show command - show comments for a commit
  *
  * @module cli/commands/show
  */
 
 import { Command } from "commander";
-import { getHeadCommit, resolveRef, execOrThrow } from "../../git/index.js";
-import { readReviewRequests, readComments } from "../../notes/index.js";
+import { getHeadCommit, resolveRef } from "../../git/index.js";
+import { readComments } from "../../notes/index.js";
 import {
-  getReviewState,
-  getLatestRequest,
   computeCommentHash,
   buildCommentTree,
   type CommentWithHash,
   type CommentTree,
 } from "../../types/index.js";
 import {
-  formatReviewDetail,
+  formatCommitComments,
   formatError,
   type OutputFormat,
 } from "../formatters/index.js";
@@ -29,10 +27,8 @@ import {
 export function registerShowCommand(program: Command): void {
   program
     .command("show")
-    .description("Show details of a specific review")
-    .argument("[commit]", "Review commit (default: HEAD)")
-    .option("--diff", "Show diff of changes", false)
-    .option("--comments", "Include comments", true)
+    .description("Show comments for a commit")
+    .argument("[commit]", "Commit to show comments for (default: HEAD)")
     .option("--json", "Output as JSON", false)
     .action(async (commit: string | undefined, options: ShowOptions) => {
       try {
@@ -45,8 +41,6 @@ export function registerShowCommand(program: Command): void {
 }
 
 interface ShowOptions {
-  readonly diff: boolean;
-  readonly comments: boolean;
   readonly json: boolean;
 }
 
@@ -62,67 +56,28 @@ async function executeShow(
     commit = await getHeadCommit();
   }
 
-  // Read review requests
-  const requests = await readReviewRequests(commit);
-  if (requests.length === 0) {
-    throw new Error(`No review found for commit ${commit.substring(0, 7)}`);
-  }
+  // Read comments
+  const rawComments = await readComments(commit);
 
-  // Get latest request and status
-  const latest = getLatestRequest(requests);
-  if (!latest) {
-    throw new Error(`No review found for commit ${commit.substring(0, 7)}`);
-  }
+  // Add hashes to comments
+  const commentsWithHash: CommentWithHash[] = rawComments.map((c) => ({
+    ...c,
+    hash: computeCommentHash(c),
+  }));
 
-  const status = getReviewState(requests);
-
-  // Read and process comments
-  let commentTrees: CommentTree[] = [];
-  if (options.comments) {
-    const rawComments = await readComments(commit);
-
-    // Add hashes to comments
-    const commentsWithHash: CommentWithHash[] = rawComments.map((c) => ({
-      ...c,
-      hash: computeCommentHash(c),
-    }));
-
-    // Build comment trees (only for root comments - those without parent)
-    const rootComments = commentsWithHash.filter((c) => !c.parent);
-    for (const root of rootComments) {
-      const tree = buildCommentTree(commentsWithHash, root.hash);
-      if (tree) {
-        commentTrees.push(tree);
-      }
+  // Build comment trees (only for root comments - those without parent)
+  const commentTrees: CommentTree[] = [];
+  const rootComments = commentsWithHash.filter((c) => !c.parent);
+  for (const root of rootComments) {
+    const tree = buildCommentTree(commentsWithHash, root.hash);
+    if (tree) {
+      commentTrees.push(tree);
     }
   }
 
   // Format output
   const format: OutputFormat = options.json ? "json" : "table";
-  const output = formatReviewDetail(
-    {
-      commit,
-      author: latest.requester,
-      target: latest.targetRef,
-      source: latest.reviewRef,
-      status,
-      description: latest.description ?? "",
-    },
-    commentTrees,
-    format
-  );
+  const output = formatCommitComments(commit, commentTrees, format);
 
   console.log(output);
-
-  // Show diff if requested
-  if (options.diff) {
-    console.log("\n--- Diff ---\n");
-    const targetBranch = latest.targetRef.replace("refs/heads/", "");
-    const sourceBranch = latest.reviewRef.replace("refs/heads/", "");
-    const diffOutput = await execOrThrow([
-      "diff",
-      `${targetBranch}...${sourceBranch}`,
-    ]);
-    console.log(diffOutput);
-  }
 }

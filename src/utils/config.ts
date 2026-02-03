@@ -16,8 +16,6 @@ export interface XNotesConfig {
   readonly githubToken?: string | undefined;
   /** Prefix for notes refs */
   readonly notesRefPrefix: string;
-  /** Default target branch for reviews */
-  readonly defaultTarget: string;
   /** Enable debug output */
   readonly debug: boolean;
 }
@@ -36,7 +34,6 @@ export interface ConfigOptions {
 const DEFAULT_CONFIG: XNotesConfig = {
   user: "",
   notesRefPrefix: "refs/notes/xnotes",
-  defaultTarget: "main",
   debug: false,
 };
 
@@ -52,7 +49,6 @@ const ENV_VARS = {
   user: "XNOTES_USER",
   githubToken: "GITHUB_TOKEN",
   notesRefPrefix: "XNOTES_REFS_PREFIX",
-  defaultTarget: "XNOTES_DEFAULT_TARGET",
   debug: "XNOTES_DEBUG",
 } as const;
 
@@ -86,11 +82,6 @@ export function getEnvConfig(): Partial<XNotesConfig> {
     config.notesRefPrefix = notesRefPrefix;
   }
 
-  const defaultTarget = process.env[ENV_VARS.defaultTarget];
-  if (defaultTarget) {
-    config.defaultTarget = defaultTarget;
-  }
-
   const debug = process.env[ENV_VARS.debug];
   if (debug !== undefined) {
     config.debug = debug === "1" || debug.toLowerCase() === "true";
@@ -122,14 +113,6 @@ export async function getGitConfig(options?: ConfigOptions): Promise<Partial<XNo
   });
   if (refPrefixResult.exitCode === 0 && refPrefixResult.stdout.trim()) {
     config.notesRefPrefix = refPrefixResult.stdout.trim();
-  }
-
-  // Get defaultTarget
-  const targetResult = await exec(["config", "--get", `${GIT_CONFIG_PREFIX}.defaultTarget`], {
-    cwd: options?.cwd,
-  });
-  if (targetResult.exitCode === 0 && targetResult.stdout.trim()) {
-    config.defaultTarget = targetResult.stdout.trim();
   }
 
   // Get debug
@@ -174,9 +157,6 @@ export function mergeConfig(...configs: Partial<XNotesConfig>[]): XNotesConfig {
     if (config.notesRefPrefix !== undefined) {
       result.notesRefPrefix = config.notesRefPrefix;
     }
-    if (config.defaultTarget !== undefined) {
-      result.defaultTarget = config.defaultTarget;
-    }
     if (config.debug !== undefined) {
       result.debug = config.debug;
     }
@@ -217,12 +197,6 @@ export async function saveConfig(
 
   if (config.notesRefPrefix !== undefined) {
     await exec(["config", `${GIT_CONFIG_PREFIX}.notesRefPrefix`, config.notesRefPrefix], {
-      cwd: options?.cwd,
-    });
-  }
-
-  if (config.defaultTarget !== undefined) {
-    await exec(["config", `${GIT_CONFIG_PREFIX}.defaultTarget`, config.defaultTarget], {
       cwd: options?.cwd,
     });
   }
@@ -277,11 +251,6 @@ export async function setConfigValue(
         partial.notesRefPrefix = value;
       }
       break;
-    case "defaultTarget":
-      if (typeof value === "string") {
-        partial.defaultTarget = value;
-      }
-      break;
     case "debug":
       if (typeof value === "boolean") {
         partial.debug = value;
@@ -312,7 +281,6 @@ export async function listConfig(
     user: config.user,
     githubToken: config.githubToken ? "***" : undefined, // Mask token
     notesRefPrefix: config.notesRefPrefix,
-    defaultTarget: config.defaultTarget,
     debug: config.debug,
   };
 }

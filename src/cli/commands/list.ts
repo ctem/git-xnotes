@@ -1,17 +1,16 @@
 /**
- * List command - list open reviews
+ * List command - list commits with comments
  *
  * @module cli/commands/list
  */
 
 import { Command } from "commander";
-import { readAllReviewRequests } from "../../notes/index.js";
-import { getReviewState, getLatestRequest } from "../../types/index.js";
+import { listNotesCommits, readComments } from "../../notes/index.js";
 import {
-  formatReviewList,
+  formatCommitList,
   formatError,
   type OutputFormat,
-  type ReviewListItem,
+  type CommitListItem,
 } from "../formatters/index.js";
 
 /**
@@ -22,10 +21,8 @@ import {
 export function registerListCommand(program: Command): void {
   program
     .command("list")
-    .description("List open reviews in the repository")
-    .option("-a, --all", "Include closed/submitted reviews", false)
-    .option("--author <email>", "Filter by author email")
-    .option("--target <branch>", "Filter by target branch")
+    .description("List commits with comments")
+    .option("--author <email>", "Filter by comment author email")
     .option(
       "-f, --format <type>",
       "Output format: table, json, oneline",
@@ -42,65 +39,58 @@ export function registerListCommand(program: Command): void {
 }
 
 interface ListOptions {
-  readonly all: boolean;
   readonly author?: string;
-  readonly target?: string;
   readonly format: string;
 }
 
 async function executeList(options: ListOptions): Promise<void> {
-  // Read all review requests
-  const allRequests = await readAllReviewRequests();
+  // List all commits with discuss notes
+  const commitsWithNotes = await listNotesCommits("discuss");
 
   // Convert to list items
-  const items: ReviewListItem[] = [];
+  const items: CommitListItem[] = [];
 
-  for (const [commit, requests] of allRequests) {
-    if (requests.length === 0) continue;
+  for (const [commit] of commitsWithNotes) {
+    // Read comments for this commit
+    const comments = await readComments(commit);
 
-    // Get the latest request to determine current state
-    const latest = getLatestRequest(requests);
+    if (comments.length === 0) continue;
+
+    // Filter by author if specified
+    let filteredComments = comments;
+    if (options.author) {
+      filteredComments = comments.filter((c) => c.author === options.author);
+      if (filteredComments.length === 0) continue;
+    }
+
+    // Find the latest comment by timestamp
+    const sortedComments = [...filteredComments].sort((a, b) =>
+      parseInt(b.timestamp, 10) - parseInt(a.timestamp, 10)
+    );
+    const latest = sortedComments[0];
     if (!latest) continue;
 
-    const status = getReviewState(requests);
-
-    // Filter by status if not showing all
-    if (!options.all && (status === "submitted" || status === "abandoned")) {
-      continue;
-    }
-
-    // Filter by author
-    if (options.author && latest.requester !== options.author) {
-      continue;
-    }
-
-    // Filter by target
-    if (options.target) {
-      const targetRef = `refs/heads/${options.target}`;
-      if (latest.targetRef !== targetRef) {
-        continue;
-      }
-    }
+    const latestDate = new Date(parseInt(latest.timestamp, 10) * 1000);
+    const dateStr = latestDate.toISOString().split("T")[0];
 
     items.push({
       commit,
-      author: latest.requester,
-      target: latest.targetRef,
-      status,
-      description: latest.description ?? "",
+      commentCount: filteredComments.length,
+      latestAuthor: latest.author,
+      latestDate: dateStr ?? "",
     });
   }
 
-  // Sort by timestamp (newest first)
-  items.sort((a, b) => b.commit.localeCompare(a.commit));
+  // Sort by latest comment date (newest first)
+  items.sort((a, b) => b.latestDate.localeCompare(a.latestDate));
 
   // Format and output
   const format = validateFormat(options.format);
-  const output = formatReviewList(items, format);
+  const output = formatCommitList(items, format);
   console.log(output);
 
   if (items.length === 0) {
-    console.log("No reviews found.");
+    console.log("No commits with comments found.");
   }
 }
 

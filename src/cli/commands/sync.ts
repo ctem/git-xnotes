@@ -5,7 +5,8 @@
  */
 
 import { Command } from "commander";
-import { createClient, autoSync, type SyncResult } from "../../github/index.js";
+import { getHeadCommit, resolveRef } from "../../git/index.js";
+import { createClient, autoSync, type SyncResult, type PRMapping } from "../../github/index.js";
 import { formatError, formatSuccess } from "../formatters/index.js";
 
 /**
@@ -17,13 +18,14 @@ export function registerSyncCommand(program: Command): void {
   program
     .command("sync")
     .description("Synchronize comments with GitHub PR")
+    .argument("[commit]", "Commit to sync comments for (default: HEAD)")
+    .requiredOption("--pr <number>", "GitHub PR number", parseInt)
     .option("--pull", "Import PR comments to notes")
     .option("--push", "Export notes to PR comments")
     .option("--bidirectional", "Full two-way sync (default)")
-    .option("--pr <number>", "Specific PR number", parseInt)
-    .action(async (options: SyncOptions) => {
+    .action(async (commit: string | undefined, options: SyncOptions) => {
       try {
-        await executeSync(options);
+        await executeSync(commit, options);
       } catch (error) {
         console.error(formatError(error));
         process.exit(1);
@@ -32,13 +34,21 @@ export function registerSyncCommand(program: Command): void {
 }
 
 interface SyncOptions {
+  readonly pr: number;
   readonly pull?: boolean | undefined;
   readonly push?: boolean | undefined;
   readonly bidirectional?: boolean | undefined;
-  readonly pr?: number | undefined;
 }
 
-async function executeSync(options: SyncOptions): Promise<void> {
+async function executeSync(commitArg: string | undefined, options: SyncOptions): Promise<void> {
+  // Resolve commit
+  let commit: string;
+  if (commitArg) {
+    commit = await resolveRef(commitArg);
+  } else {
+    commit = await getHeadCommit();
+  }
+
   // Determine sync mode
   let mode: "pull" | "push" | "bidirectional" = "bidirectional";
   if (options.pull && !options.push) {
@@ -47,11 +57,17 @@ async function executeSync(options: SyncOptions): Promise<void> {
     mode = "push";
   }
 
+  // Create PR mapping
+  const mapping: PRMapping = {
+    commit,
+    prNumber: options.pr,
+  };
+
   // Create GitHub client
   const client = await createClient();
 
   // Perform sync
-  const result = await autoSync(client, options.pr, mode);
+  const result = await autoSync(client, mapping, mode);
 
   // Report results
   reportSyncResult(result, mode, options.pr);
@@ -60,9 +76,9 @@ async function executeSync(options: SyncOptions): Promise<void> {
 function reportSyncResult(
   result: SyncResult,
   mode: "pull" | "push" | "bidirectional",
-  prNumber?: number | undefined
+  prNumber: number
 ): void {
-  const prDisplay = prNumber ? `PR #${prNumber}` : "auto-detected PR";
+  const prDisplay = `PR #${prNumber}`;
 
   if (result.imported === 0 && result.exported === 0 && result.conflicts.length === 0) {
     console.log(formatSuccess(`Sync complete for ${prDisplay}: already in sync`));

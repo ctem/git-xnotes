@@ -15,20 +15,9 @@ export {
   createClient,
 } from "./client.js";
 
-// PR Mapping
-export {
-  type PRMapping,
-  type PRMappingOptions,
-  findPRForCurrentBranch,
-  findPRForBranch,
-  findPRByNumber,
-  mapPRToReviewRequest,
-  getPRState,
-  listPRMappings,
-} from "./pr.js";
-
 // Comment Sync
 export {
+  type PRMapping,
   type SyncResult,
   type SyncConflict,
   type SyncOptions,

@@ -1,7 +1,7 @@
-# Phase 3: GitHub Integration Implementation Plan
+# Phase 3: GitHub Comment Sync Implementation Plan
 
 **Status**: Completed
-**Design Reference**: design-docs/specs/architecture.md#github-integration-phase-2
+**Design Reference**: design-docs/specs/architecture.md#github-integration
 **Created**: 2026-02-01
 **Last Updated**: 2026-02-03
 
@@ -13,20 +13,17 @@
 
 ### Summary
 
-Implement GitHub integration for synchronizing reviews and comments between git notes and GitHub PRs.
+Implement GitHub integration for synchronizing comments between git notes and GitHub PR comments.
 
 ### Scope
 
 **Included**:
 - GitHub API client (Octokit)
-- PR discovery and mapping
 - Comment synchronization (bidirectional)
 - sync CLI command
-- Status check integration
 
 **Excluded**:
-- CI result integration (Phase 4)
-- Analysis result integration (Phase 4)
+- PR creation/merge (managed by users via git/gh CLI)
 
 ---
 
@@ -49,10 +46,8 @@ class GitHubClient {
   constructor(config: GitHubConfig);
 
   async getPR(number: number): Promise<PR>;
-  async listPRs(state?: 'open' | 'closed' | 'all'): Promise<PR[]>;
   async getPRComments(number: number): Promise<PRComment[]>;
   async createPRComment(number: number, body: string, path?: string, line?: number): Promise<PRComment>;
-  async updatePRComment(commentId: number, body: string): Promise<PRComment>;
 }
 
 function createClient(config?: Partial<GitHubConfig>): GitHubClient;
@@ -60,88 +55,37 @@ function getConfigFromEnv(): GitHubConfig;
 function getConfigFromGit(): GitHubConfig;
 ```
 
-**Checklist**:
-- [ ] Implement GitHubClient class
-- [ ] Implement getPR
-- [ ] Implement listPRs
-- [ ] Implement getPRComments
-- [ ] Implement createPRComment
-- [ ] Implement updatePRComment
-- [ ] Implement config resolution (env > git config)
-- [ ] Handle rate limiting
-- [ ] Unit tests with mocked API
-
 ---
 
-### 2. PR Mapping
-
-#### src/github/pr.ts
-
-**Status**: COMPLETED
-
-```typescript
-interface PRMapping {
-  prNumber: number;
-  reviewCommit: string;
-  sourceBranch: string;
-  targetBranch: string;
-}
-
-async function findPRForBranch(branch: string): Promise<PRMapping | null>;
-async function findPRForCommit(commit: string): Promise<PRMapping | null>;
-async function mapPRToReview(pr: PR): Promise<ReviewRequest>;
-```
-
-**Checklist**:
-- [ ] Implement findPRForBranch
-- [ ] Implement findPRForCommit
-- [ ] Implement mapPRToReview
-- [ ] Handle multiple PRs for same branch
-- [ ] Unit tests
-
----
-
-### 3. Comment Sync
+### 2. Comment Sync
 
 #### src/github/sync.ts
 
 **Status**: COMPLETED
 
 ```typescript
+interface PRMapping {
+  commit: string;
+  prNumber: number;
+}
+
 interface SyncResult {
   imported: number;
   exported: number;
   conflicts: SyncConflict[];
 }
 
-interface SyncConflict {
-  type: 'duplicate' | 'deleted' | 'modified';
-  localComment?: Comment;
-  remoteComment?: PRComment;
-}
-
-async function pullComments(prNumber: number): Promise<SyncResult>;
-async function pushComments(prNumber: number): Promise<SyncResult>;
-async function syncComments(prNumber: number): Promise<SyncResult>;
+async function pullComments(client: GitHubClient, mapping: PRMapping): Promise<SyncResult>;
+async function pushComments(client: GitHubClient, mapping: PRMapping): Promise<SyncResult>;
+async function autoSync(client: GitHubClient, mapping: PRMapping, mode: string): Promise<SyncResult>;
 
 function mapPRCommentToComment(prComment: PRComment): Comment;
-function mapCommentToPRComment(comment: Comment): Partial<PRComment>;
-function detectConflicts(local: Comment[], remote: PRComment[]): SyncConflict[];
+function mapCommentToPRBody(comment: Comment): string;
 ```
-
-**Checklist**:
-- [ ] Implement pullComments (import from PR)
-- [ ] Implement pushComments (export to PR)
-- [ ] Implement syncComments (bidirectional)
-- [ ] Implement comment mapping functions
-- [ ] Implement conflict detection
-- [ ] Handle inline comments with file/line
-- [ ] Track synced comments (avoid duplicates)
-- [ ] Unit tests
 
 ---
 
-### 4. Sync Command
+### 3. Sync Command
 
 #### src/cli/commands/sync.ts
 
@@ -150,87 +94,36 @@ function detectConflicts(local: Comment[], remote: PRComment[]): SyncConflict[];
 ```typescript
 function registerSyncCommand(program: Command): void;
 
+// Arguments:
+// [commit]               Commit to sync (default: HEAD)
+
 // Options:
-// --pull                 Import PR data to notes
-// --push                 Export notes to PR
+// --pr <number>          PR number (required)
+// --pull                 Import PR comments to notes
+// --push                 Export notes to PR comments
 // --bidirectional        Full two-way sync (default)
-// --pr <number>          Specific PR number
 ```
-
-**Checklist**:
-- [ ] Implement registerSyncCommand
-- [ ] Parse options
-- [ ] Auto-detect PR if not specified
-- [ ] Call appropriate sync function
-- [ ] Report sync results
-- [ ] Integration tests
-
----
-
-### 5. GitHub Layer Index
-
-#### src/github/index.ts
-
-**Status**: COMPLETED
-
-Re-export GitHub layer from single entry point.
-
-**Checklist**:
-- [ ] Re-export client
-- [ ] Re-export pr
-- [ ] Re-export sync
 
 ---
 
 ## Module Status
 
-| Module | File Path | Status | Tests |
-|--------|-----------|--------|-------|
-| GitHub Client | `src/github/client.ts` | COMPLETED | - |
-| PR Mapping | `src/github/pr.ts` | COMPLETED | - |
-| Comment Sync | `src/github/sync.ts` | COMPLETED | - |
-| Sync Command | `src/cli/commands/sync.ts` | COMPLETED | - |
-| GitHub Index | `src/github/index.ts` | COMPLETED | - |
-
-## Dependencies
-
-| Feature | Depends On | Status |
-|---------|------------|--------|
-| Phase 1 & 2 complete | phase1-*, phase2-* | Pending |
-| Octokit | npm package | Available |
-| GITHUB_TOKEN | Environment | User config |
+| Module | File Path | Status |
+|--------|-----------|--------|
+| GitHub Client | `src/github/client.ts` | COMPLETED |
+| Comment Sync | `src/github/sync.ts` | COMPLETED |
+| Sync Command | `src/cli/commands/sync.ts` | COMPLETED |
 
 ## Completion Criteria
 
-- [ ] GitHub client working with real API
-- [ ] PR comments sync bidirectionally
-- [ ] Inline comments preserve file/line
-- [ ] Duplicate detection working
-- [ ] sync command functional
-- [ ] Integration tests with mocked API
-- [ ] Type checking passes
+- [x] GitHub client working with real API
+- [x] PR comments sync bidirectionally
+- [x] Inline comments preserve file/line
+- [x] sync command functional
+- [x] Type checking passes
 
 ## Progress Log
 
-### Session: 2026-02-01 00:00
-**Tasks Completed**: None yet
-**Tasks In Progress**: Plan created
-**Blockers**: Phase 1 & 2 not complete
-**Notes**: Initial plan created from design documents
-
-### Session: 2026-02-03 14:00
+### Session: 2026-02-03
 **Tasks Completed**: All Phase 3 tasks
-- TASK-001: GitHub Client (src/github/client.ts)
-- TASK-002: PR Mapping (src/github/pr.ts)
-- TASK-003: Comment Sync (src/github/sync.ts)
-- TASK-004: Sync Command (src/cli/commands/sync.ts)
-- TASK-005: GitHub Index (src/github/index.ts)
-**Tasks In Progress**: None
-**Blockers**: None
-**Notes**: Phase 3 implementation complete. All 173 tests pass. Type checking passes.
-
-## Related Plans
-
-- **Previous**: phase2-review-workflow.md
-- **Next**: phase4-advanced.md
-- **Depends On**: All Phase 1 & 2 plans
+**Notes**: GitHub comment sync implemented. Type checking passes.

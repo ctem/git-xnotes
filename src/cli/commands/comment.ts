@@ -1,12 +1,12 @@
 /**
- * Comment command - add a comment to a review
+ * Comment command - add a comment to a commit
  *
  * @module cli/commands/comment
  */
 
 import { Command } from "commander";
 import { getHeadCommit, resolveRef, getUserEmail } from "../../git/index.js";
-import { readReviewRequests, readComments, appendComment } from "../../notes/index.js";
+import { readComments, appendComment } from "../../notes/index.js";
 import { createComment, computeCommentHash, type CommentLocation, type Comment } from "../../types/index.js";
 import { formatError, formatSuccess } from "../formatters/index.js";
 
@@ -18,8 +18,8 @@ import { formatError, formatSuccess } from "../formatters/index.js";
 export function registerCommentCommand(program: Command): void {
   program
     .command("comment")
-    .description("Add a comment to a review")
-    .argument("[commit]", "Review commit to comment on (default: HEAD)")
+    .description("Add a comment to a commit")
+    .argument("[commit]", "Commit to comment on (default: HEAD)")
     .option("-m, --message <text>", "Comment text")
     .option("-f, --file <path>", "File path for inline comment")
     .option("-l, --line <number>", "Line number for inline comment")
@@ -80,12 +80,6 @@ async function executeComment(
     commit = await resolveRef(commitArg);
   } else {
     commit = await getHeadCommit();
-  }
-
-  // Verify review exists
-  const requests = await readReviewRequests(commit);
-  if (requests.length === 0) {
-    throw new Error(`No review found for commit ${commit.substring(0, 7)}`);
   }
 
   // Get message (TODO: open editor if not provided)

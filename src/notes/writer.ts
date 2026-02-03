@@ -6,18 +6,9 @@
 
 import { execOrThrow } from "../git/commands.js";
 import {
-  type ReviewRequest,
-  serializeReviewRequest,
-  validateReviewRequest,
   type Comment,
   serializeComment,
   validateComment,
-  type CIResult,
-  serializeCIResult,
-  validateCIResult,
-  type AnalysisResult,
-  serializeAnalysisResult,
-  validateAnalysisResult,
 } from "../types/index.js";
 import { type NotesRefType, getNotesRef } from "./refs.js";
 
@@ -120,23 +111,6 @@ export async function removeNote(
 }
 
 /**
- * Appends a review request to a commit.
- *
- * @param commit - Commit hash to annotate
- * @param request - Review request to append
- * @param options - Write options
- */
-export async function appendReviewRequest(
-  commit: string,
-  request: ReviewRequest,
-  options?: WriteNotesOptions
-): Promise<void> {
-  // Validate before writing
-  validateReviewRequest(request);
-  await appendNote("reviews", commit, request, serializeReviewRequest, options);
-}
-
-/**
  * Appends a comment to a commit.
  *
  * @param commit - Commit hash to annotate
@@ -151,38 +125,4 @@ export async function appendComment(
   // Validate before writing
   validateComment(comment);
   await appendNote("discuss", commit, comment, serializeComment, options);
-}
-
-/**
- * Appends a CI result to a commit.
- *
- * @param commit - Commit hash to annotate
- * @param result - CI result to append
- * @param options - Write options
- */
-export async function appendCIResult(
-  commit: string,
-  result: CIResult,
-  options?: WriteNotesOptions
-): Promise<void> {
-  // Validate before writing
-  validateCIResult(result);
-  await appendNote("ci", commit, result, serializeCIResult, options);
-}
-
-/**
- * Appends an analysis result to a commit.
- *
- * @param commit - Commit hash to annotate
- * @param result - Analysis result to append
- * @param options - Write options
- */
-export async function appendAnalysisResult(
-  commit: string,
-  result: AnalysisResult,
-  options?: WriteNotesOptions
-): Promise<void> {
-  // Validate before writing
-  validateAnalysisResult(result);
-  await appendNote("analyses", commit, result, serializeAnalysisResult, options);
 }

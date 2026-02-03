@@ -1,6 +1,6 @@
 {
   "variables": {
-    "AUTHOR_EMAIL": "me@tacogips.me",
+    "AUTHOR_EMAIL": "",
     "AUTHOR_NAME": "tacogips",
     "DESCRIPTION": "reviews in git notes",
     "HAS_AUTHOR": false,

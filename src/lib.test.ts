@@ -34,11 +34,7 @@ describe("lib exports", () => {
     expect(lib.readNoteRaw).toBeDefined();
     expect(lib.readNote).toBeDefined();
     expect(lib.listNotesCommits).toBeDefined();
-    expect(lib.readReviewRequests).toBeDefined();
     expect(lib.readComments).toBeDefined();
-    expect(lib.readCIResults).toBeDefined();
-    expect(lib.readAnalysisResults).toBeDefined();
-    expect(lib.readAllReviewRequests).toBeDefined();
   });
 
   test("exports notes writing functions", () => {
@@ -46,7 +42,6 @@ describe("lib exports", () => {
     expect(lib.appendNote).toBeDefined();
     expect(lib.replaceNote).toBeDefined();
     expect(lib.removeNote).toBeDefined();
-    expect(lib.appendReviewRequest).toBeDefined();
     expect(lib.appendComment).toBeDefined();
   });
 
@@ -58,37 +53,10 @@ describe("lib exports", () => {
     expect(lib.fetchAllNotes).toBeDefined();
   });
 
-  test("exports review service functions", () => {
-    expect(lib.getReview).toBeDefined();
-    expect(lib.acceptReview).toBeDefined();
-    expect(lib.rejectReview).toBeDefined();
-    expect(lib.submitReview).toBeDefined();
-    expect(lib.abandonReview).toBeDefined();
-  });
-
-  test("exports CI service functions", () => {
-    expect(lib.getCIStatus).toBeDefined();
-    expect(lib.recordCIResult).toBeDefined();
-    expect(lib.isCIPassing).toBeDefined();
-  });
-
-  test("exports analysis service functions", () => {
-    expect(lib.getAnalysisStatus).toBeDefined();
-    expect(lib.recordAnalysisResult).toBeDefined();
-    expect(lib.isAnalysisPassing).toBeDefined();
-  });
-
-  test("exports type utilities", () => {
-    expect(lib.createReviewRequest).toBeDefined();
-    expect(lib.parseReviewRequest).toBeDefined();
-    expect(lib.serializeReviewRequest).toBeDefined();
+  test("exports comment type utilities", () => {
     expect(lib.createComment).toBeDefined();
     expect(lib.parseComment).toBeDefined();
     expect(lib.serializeComment).toBeDefined();
-    expect(lib.createCIResult).toBeDefined();
-    expect(lib.parseCIResult).toBeDefined();
-    expect(lib.createAnalysisResult).toBeDefined();
-    expect(lib.parseAnalysisResult).toBeDefined();
   });
 
   test("exports error types", () => {
@@ -120,15 +88,12 @@ describe("lib utility functions", () => {
     expect(lib.isValidEmail("invalid")).toBe(false);
   });
 
-  test("getNotesRef returns correct ref", () => {
-    expect(lib.getNotesRef("reviews")).toBe("refs/notes/xnotes/reviews");
+  test("getNotesRef returns correct ref for discuss", () => {
     expect(lib.getNotesRef("discuss")).toBe("refs/notes/xnotes/discuss");
-    expect(lib.getNotesRef("ci")).toBe("refs/notes/xnotes/ci");
-    expect(lib.getNotesRef("analyses")).toBe("refs/notes/xnotes/analyses");
   });
 
   test("isNotesRef detects xnotes refs", () => {
-    expect(lib.isNotesRef("refs/notes/xnotes/reviews")).toBe(true);
+    expect(lib.isNotesRef("refs/notes/xnotes/discuss")).toBe(true);
     expect(lib.isNotesRef("refs/notes/other")).toBe(false);
     expect(lib.isNotesRef("refs/heads/main")).toBe(false);
   });

@@ -4,7 +4,7 @@
  * @module cli/formatters
  */
 
-import type { ReviewState, CommentTree } from "../../types/index.js";
+import type { CommentTree } from "../../types/index.js";
 
 /**
  * Output format types
@@ -12,35 +12,34 @@ import type { ReviewState, CommentTree } from "../../types/index.js";
 export type OutputFormat = "table" | "json" | "oneline";
 
 /**
- * Review list item for display
+ * Commit list item for display
  */
-export interface ReviewListItem {
+export interface CommitListItem {
   readonly commit: string;
-  readonly author: string;
-  readonly target: string;
-  readonly status: ReviewState;
-  readonly description: string;
+  readonly commentCount: number;
+  readonly latestAuthor: string;
+  readonly latestDate: string;
 }
 
 /**
- * Formats a review list for output.
+ * Formats a commit list for output.
  *
- * @param items - Review list items
+ * @param items - Commit list items
  * @param format - Output format
  * @returns Formatted string
  */
-export function formatReviewList(
-  items: readonly ReviewListItem[],
+export function formatCommitList(
+  items: readonly CommitListItem[],
   format: OutputFormat
 ): string {
   switch (format) {
     case "json":
-      return JSON.stringify({ reviews: items }, null, 2);
+      return JSON.stringify({ commits: items }, null, 2);
 
     case "oneline":
       return items
         .map((item) =>
-          `${item.commit.substring(0, 7)} ${item.author} ${item.target} ${item.status} ${item.description}`
+          `${item.commit.substring(0, 7)} ${item.commentCount} comments ${item.latestAuthor} ${item.latestDate}`
         )
         .join("\n");
 
@@ -49,12 +48,11 @@ export function formatReviewList(
       return formatTable(
         items.map((item) => [
           item.commit.substring(0, 7),
-          truncate(item.author, 20),
-          truncate(item.target.replace("refs/heads/", ""), 12),
-          item.status,
-          truncate(item.description, 40),
+          String(item.commentCount),
+          truncate(item.latestAuthor, 25),
+          item.latestDate,
         ]),
-        ["COMMIT", "AUTHOR", "TARGET", "STATUS", "DESCRIPTION"]
+        ["COMMIT", "COMMENTS", "LATEST AUTHOR", "DATE"]
       );
   }
 }
@@ -108,41 +106,32 @@ export function truncate(str: string, maxLen: number): string {
 }
 
 /**
- * Formats a review detail for output.
+ * Formats commit comments for output.
  *
- * @param review - Review information
+ * @param commit - Commit hash
  * @param comments - Comment trees
  * @param format - Output format
  * @returns Formatted string
  */
-export function formatReviewDetail(
-  review: {
-    commit: string;
-    author: string;
-    target: string;
-    source: string;
-    status: ReviewState;
-    description: string;
-  },
+export function formatCommitComments(
+  commit: string,
   comments: readonly CommentTree[],
   format: OutputFormat
 ): string {
   switch (format) {
     case "json":
-      return JSON.stringify({ review, comments }, null, 2);
+      return JSON.stringify({ commit, comments }, null, 2);
 
     default:
       const lines: string[] = [];
 
-      lines.push(`Review: ${review.commit.substring(0, 7)}`);
-      lines.push(`Author: ${review.author}`);
-      lines.push(`Source: ${review.source.replace("refs/heads/", "")}`);
-      lines.push(`Target: ${review.target.replace("refs/heads/", "")}`);
-      lines.push(`Status: ${review.status}`);
-      lines.push("");
-      lines.push(review.description || "(no description)");
+      lines.push(`Comments for: ${commit.substring(0, 7)}`);
 
-      if (comments.length > 0) {
+      if (comments.length === 0) {
+        lines.push("");
+        lines.push("(no comments)");
+      } else {
+        lines.push(`Total: ${comments.length} thread(s)`);
         lines.push("");
         lines.push("--- Comments ---");
         for (const tree of comments) {

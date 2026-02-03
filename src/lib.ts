@@ -6,13 +6,13 @@
  *
  * @example
  * ```typescript
- * import { readReviewRequests, getReview } from 'git-xnotes';
+ * import { readComments, listNotesCommits } from 'git-xnotes';
  *
- * // Read reviews from a specific git repository
- * const reviews = await readReviewRequests(commit, { cwd: '/path/to/repo' });
+ * // Read comments for a commit
+ * const comments = await readComments(commit, { cwd: '/path/to/repo' });
  *
- * // Get review info with full context
- * const review = await getReview(commit, { cwd: '/path/to/repo' });
+ * // List all commits with comments
+ * const commits = await listNotesCommits('discuss', { cwd: '/path/to/repo' });
  * ```
  *
  * @module git-xnotes
@@ -88,11 +88,7 @@ export {
   readNoteRaw,
   readNote,
   listNotesCommits,
-  readReviewRequests,
   readComments,
-  readCIResults,
-  readAnalysisResults,
-  readAllReviewRequests,
   notesRefExists,
 } from "./notes/index.js";
 
@@ -104,10 +100,7 @@ export {
   appendNote,
   replaceNote,
   removeNote,
-  appendReviewRequest,
   appendComment,
-  appendCIResult,
-  appendAnalysisResult,
 } from "./notes/index.js";
 
 // Merging notes
@@ -134,66 +127,8 @@ export {
 } from "./notes/index.js";
 
 // =============================================================================
-// Services (High-level Business Logic)
-// =============================================================================
-
-// Review service
-export type {
-  SubmitOptions,
-  ReviewInfo,
-  ReviewServiceOptions,
-} from "./services/index.js";
-
-export {
-  getReview,
-  acceptReview,
-  rejectReview,
-  submitReview,
-  abandonReview,
-} from "./services/index.js";
-
-// CI service
-export type { CIServiceOptions } from "./services/index.js";
-
-export {
-  getCIStatus,
-  recordCIResult,
-  getLatestCIResult as getLatestCIServiceResult,
-  isCIPassing,
-  getCIResultsByAgent,
-} from "./services/index.js";
-
-// Analysis service
-export type { AnalysisServiceOptions } from "./services/index.js";
-
-export {
-  getAnalysisStatus,
-  recordAnalysisResult,
-  getLatestAnalysisResult,
-  needsAttention,
-  isAnalysisPassing,
-} from "./services/index.js";
-
-// =============================================================================
 // Types
 // =============================================================================
-
-// Review types
-export type {
-  ReviewRequest,
-  ReviewState,
-} from "./types/index.js";
-
-export {
-  REVIEW_SCHEMA_VERSION,
-  validateReviewRequest,
-  getReviewState,
-  sortRequestsByTimestamp,
-  getLatestRequest,
-  serializeReviewRequest,
-  parseReviewRequest,
-  createReviewRequest,
-} from "./types/index.js";
 
 // Comment types
 export type {
@@ -214,39 +149,6 @@ export {
   findReplies,
   buildCommentTree,
   getLatestVersion,
-} from "./types/index.js";
-
-// CI types
-export type {
-  CIResult,
-  CIStatus,
-  CIStatusSummary,
-} from "./types/index.js";
-
-export {
-  CI_SCHEMA_VERSION,
-  validateCIResult,
-  serializeCIResult,
-  parseCIResult,
-  createCIResult,
-  computeCISummary,
-  getLatestCIResult,
-} from "./types/index.js";
-
-// Analysis types
-export type {
-  AnalysisResult,
-  AnalysisStatus,
-  AnalysisStatusSummary,
-} from "./types/index.js";
-
-export {
-  ANALYSIS_SCHEMA_VERSION,
-  validateAnalysisResult,
-  serializeAnalysisResult,
-  parseAnalysisResult,
-  createAnalysisResult,
-  computeAnalysisSummary,
 } from "./types/index.js";
 
 // Error types

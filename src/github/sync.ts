@@ -5,7 +5,6 @@
  */
 
 import { type GitHubClient, type PRComment } from "./client.js";
-import { type PRMapping, findPRByNumber, findPRForCurrentBranch } from "./pr.js";
 import {
   type Comment,
   type CommentWithHash,
@@ -18,6 +17,16 @@ import {
   type ReadNotesOptions,
   type WriteNotesOptions,
 } from "../notes/index.js";
+
+/**
+ * Mapping between a local commit and a GitHub PR
+ */
+export interface PRMapping {
+  /** The commit hash to sync comments for */
+  readonly commit: string;
+  /** The GitHub PR number */
+  readonly prNumber: number;
+}
 
 /**
  * Sync result summary
@@ -146,7 +155,7 @@ export async function pullComments(
   options?: SyncOptions
 ): Promise<SyncResult> {
   // Get existing local comments
-  const localComments = await readComments(mapping.reviewCommit, options);
+  const localComments = await readComments(mapping.commit, options);
   const localWithHashes: CommentWithHash[] = localComments.map((c) => ({
     ...c,
     hash: computeCommentHash(c),
@@ -180,7 +189,7 @@ export async function pullComments(
 
     // Import the comment
     const newComment = mapPRCommentToComment(remoteComment);
-    await appendComment(mapping.reviewCommit, newComment, options);
+    await appendComment(mapping.commit, newComment, options);
     imported++;
   }
 
@@ -201,7 +210,7 @@ export async function pushComments(
   options?: SyncOptions
 ): Promise<SyncResult> {
   // Get local comments
-  const localComments = await readComments(mapping.reviewCommit, options);
+  const localComments = await readComments(mapping.commit, options);
   const localWithHashes: CommentWithHash[] = localComments.map((c) => ({
     ...c,
     hash: computeCommentHash(c),
@@ -331,32 +340,20 @@ export function detectConflicts(
 }
 
 /**
- * Auto-detects PR and performs sync.
+ * Performs sync with specified PR mapping.
  *
  * @param client - GitHub client
- * @param prNumber - Optional PR number (auto-detected if not provided)
+ * @param mapping - PR mapping with commit and PR number
  * @param mode - Sync mode
  * @param options - Sync options
  * @returns Sync result
  */
 export async function autoSync(
   client: GitHubClient,
-  prNumber?: number,
+  mapping: PRMapping,
   mode: "pull" | "push" | "bidirectional" = "bidirectional",
   options?: SyncOptions
 ): Promise<SyncResult> {
-  // Get PR mapping
-  let mapping: PRMapping;
-  if (prNumber !== undefined) {
-    mapping = await findPRByNumber(client, prNumber, options);
-  } else {
-    const detected = await findPRForCurrentBranch(client, options);
-    if (!detected) {
-      throw new Error("No PR found for current branch. Use --pr to specify PR number.");
-    }
-    mapping = detected;
-  }
-
   // Perform sync based on mode
   switch (mode) {
     case "pull":

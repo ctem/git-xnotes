@@ -5,19 +5,12 @@
  */
 
 import { Command } from "commander";
-import { registerRequestCommand } from "./commands/request.js";
 import { registerListCommand } from "./commands/list.js";
 import { registerShowCommand } from "./commands/show.js";
 import { registerCommentCommand } from "./commands/comment.js";
 import { registerPushCommand } from "./commands/push.js";
 import { registerPullCommand } from "./commands/pull.js";
-import { registerAcceptCommand } from "./commands/accept.js";
-import { registerRejectCommand } from "./commands/reject.js";
-import { registerSubmitCommand } from "./commands/submit.js";
-import { registerAbandonCommand } from "./commands/abandon.js";
 import { registerSyncCommand } from "./commands/sync.js";
-import { registerCICommand } from "./commands/ci.js";
-import { registerAnalysisCommand } from "./commands/analysis.js";
 import { registerConfigCommand } from "./commands/config.js";
 import { formatError } from "./formatters/index.js";
 import { isInsideRepo } from "../git/index.js";
@@ -30,7 +23,7 @@ import { isInsideRepo } from "../git/index.js";
 export function createProgram(): Command {
   const program = new Command()
     .name("git-xnotes")
-    .description("Distributed code review annotations in git notes")
+    .description("Comment on any commit using git notes")
     .version("0.1.0");
 
   // Global options
@@ -39,26 +32,13 @@ export function createProgram(): Command {
     .option("--no-color", "Disable colored output")
     .option("-C, --directory <path>", "Run in specified directory");
 
-  // Register Phase 1 commands
-  registerRequestCommand(program);
+  // Register commands
+  registerCommentCommand(program);
   registerListCommand(program);
   registerShowCommand(program);
-  registerCommentCommand(program);
   registerPushCommand(program);
   registerPullCommand(program);
-
-  // Register Phase 2 commands
-  registerAcceptCommand(program);
-  registerRejectCommand(program);
-  registerSubmitCommand(program);
-  registerAbandonCommand(program);
-
-  // Register Phase 3 commands
   registerSyncCommand(program);
-
-  // Register Phase 4 commands
-  registerCICommand(program);
-  registerAnalysisCommand(program);
   registerConfigCommand(program);
 
   return program;

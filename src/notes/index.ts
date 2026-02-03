@@ -23,11 +23,7 @@ export {
   readNoteRaw,
   readNote,
   listNotesCommits,
-  readReviewRequests,
   readComments,
-  readCIResults,
-  readAnalysisResults,
-  readAllReviewRequests,
   notesRefExists,
 } from "./reader.js";
 
@@ -38,10 +34,7 @@ export {
   appendNote,
   replaceNote,
   removeNote,
-  appendReviewRequest,
   appendComment,
-  appendCIResult,
-  appendAnalysisResult,
 } from "./writer.js";
 
 // Merging

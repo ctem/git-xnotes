@@ -35,120 +35,60 @@ This document describes the end-to-end (E2E) integration test plan for git-xnote
 
 ---
 
-#### TEST-002: Create Review Request
+#### TEST-002: Add Comment to Commit
 
-**Purpose**: Test the `request` command
+**Purpose**: Test the `comment` command (basic)
 
 **Steps**:
-1. Checkout `feature/test-feature` branch
-2. Run `git-xnotes request -t main -m "Test review request"`
-3. Verify the review request is stored in git notes
+1. Run `git-xnotes comment HEAD -m "Test comment"`
+2. Verify the comment is stored in git notes
 
-**Expected Result**: Review request created successfully with proper metadata
+**Expected Result**: Comment created successfully with proper metadata
 
 ---
 
-#### TEST-003: List Reviews
+#### TEST-003: List Commits with Comments
 
 **Purpose**: Test the `list` command
 
 **Steps**:
 1. Run `git-xnotes list`
-2. Verify the review from TEST-002 is listed
-3. Test filtering options: `--all`, `--author`, `--target`, `--format`
+2. Verify the commit from TEST-002 is listed
+3. Test filtering options: `--author`, `--format`
 
-**Expected Result**: Review list displayed with correct information
+**Expected Result**: Commits with comments displayed with correct information
 
 ---
 
-#### TEST-004: Show Review Details
+#### TEST-004: Show Comments for Commit
 
 **Purpose**: Test the `show` command
 
 **Steps**:
 1. Run `git-xnotes show` (for current HEAD)
 2. Run `git-xnotes show <commit>`
-3. Test options: `--diff`, `--comments`, `--json`
+3. Test option: `--json`
 
-**Expected Result**: Review details displayed correctly
+**Expected Result**: Comments displayed correctly
 
 ---
 
-#### TEST-005: Add Comments
+#### TEST-005: Add Various Comment Types
 
-**Purpose**: Test the `comment` command
+**Purpose**: Test the `comment` command with all options
 
 **Steps**:
-1. Add a general comment: `git-xnotes comment -m "General comment"`
-2. Add an inline comment: `git-xnotes comment -m "Inline comment" -f src/test.ts -l 10`
-3. Add a reply comment: `git-xnotes comment -m "Reply" --parent <hash>`
+1. Add a general comment: `git-xnotes comment HEAD -m "General comment"`
+2. Add an inline comment: `git-xnotes comment HEAD -m "Inline comment" -f src/test.ts -l 10`
+3. Add a reply comment: `git-xnotes comment HEAD -m "Reply" --parent <hash>`
 
-**Expected Result**: Comments stored and retrievable
-
----
-
-### Phase 2: Review Workflow
-
-#### TEST-006: Accept Review
-
-**Purpose**: Test the `accept` command
-
-**Steps**:
-1. Run `git-xnotes accept -m "LGTM"`
-2. Verify review state changes to "accepted"
-3. Run `git-xnotes list` to verify status
-
-**Expected Result**: Review marked as accepted
+**Expected Result**: All comment types stored and retrievable
 
 ---
 
-#### TEST-007: Reject Review
+### Phase 2: Notes Synchronization (Local Only)
 
-**Purpose**: Test the `reject` command
-
-**Precondition**: Create a new review request
-
-**Steps**:
-1. Create new feature branch and review request
-2. Run `git-xnotes reject -m "Needs changes"`
-3. Verify review state changes to "rejected"
-
-**Expected Result**: Review marked as rejected
-
----
-
-#### TEST-008: Submit Review
-
-**Purpose**: Test the `submit` command
-
-**Precondition**: Have an accepted review
-
-**Steps**:
-1. From TEST-006, the review should be accepted
-2. Run `git-xnotes submit`
-3. Verify feature branch is merged into target
-4. Verify review state changes to "submitted"
-
-**Expected Result**: Review merged and marked as submitted
-
----
-
-#### TEST-009: Abandon Review
-
-**Purpose**: Test the `abandon` command
-
-**Steps**:
-1. Create a new feature branch and review request
-2. Run `git-xnotes abandon`
-3. Verify review state changes to "abandoned"
-
-**Expected Result**: Review marked as abandoned without merge
-
----
-
-### Phase 3: Notes Synchronization (Local Only)
-
-#### TEST-010: Push Notes
+#### TEST-006: Push Notes
 
 **Purpose**: Test the `push` command (to a local bare repository)
 
@@ -162,7 +102,7 @@ This document describes the end-to-end (E2E) integration test plan for git-xnote
 
 ---
 
-#### TEST-011: Pull Notes
+#### TEST-007: Pull Notes
 
 **Purpose**: Test the `pull` command
 
@@ -175,39 +115,16 @@ This document describes the end-to-end (E2E) integration test plan for git-xnote
 
 ---
 
-### Phase 4: Advanced Features
+### Phase 3: Configuration
 
-#### TEST-012: CI Results
-
-**Purpose**: Test the `ci` command
-
-**Steps**:
-1. Report CI result: `git-xnotes ci report --status success --agent "test-ci"`
-2. List CI results: `git-xnotes ci list`
-
-**Expected Result**: CI results stored and retrievable
-
----
-
-#### TEST-013: Analysis Results
-
-**Purpose**: Test the `analysis` command
-
-**Steps**:
-1. Report analysis: `git-xnotes analysis report --status lgtm --url "http://example.com"`
-2. List analysis results: `git-xnotes analysis list`
-
-**Expected Result**: Analysis results stored and retrievable
-
----
-
-#### TEST-014: Configuration
+#### TEST-008: Configuration
 
 **Purpose**: Test the `config` command
 
 **Steps**:
 1. Get configuration: `git-xnotes config get`
 2. Set configuration: `git-xnotes config set <key> <value>`
+3. List configuration: `git-xnotes config list`
 
 **Expected Result**: Configuration managed correctly
 
@@ -218,71 +135,40 @@ This document describes the end-to-end (E2E) integration test plan for git-xnote
 Due to dependencies, tests should be executed in the following order:
 
 1. TEST-001 (Setup)
-2. TEST-002 (Create first review)
-3. TEST-003 (List reviews)
-4. TEST-004 (Show review)
-5. TEST-005 (Add comments)
-6. TEST-006 (Accept review)
-7. TEST-008 (Submit accepted review)
-8. TEST-007 (Reject - needs new review)
-9. TEST-009 (Abandon - needs new review)
-10. TEST-010, TEST-011 (Push/Pull)
-11. TEST-012, TEST-013, TEST-014 (Advanced)
+2. TEST-002 (Add first comment)
+3. TEST-003 (List commits with comments)
+4. TEST-004 (Show comments)
+5. TEST-005 (Add various comment types)
+6. TEST-006, TEST-007 (Push/Pull)
+7. TEST-008 (Configuration)
 
 ## Cleanup
 
 After tests, the sandbox directory can be deleted:
 ```bash
-rm -rf .private/sandbox-git/
+rm -rf .private/sandbox-git/ .private/sandbox-bare/ .private/sandbox-clone/
 ```
 
-## Test Results (2026-02-03 - Re-run after fixes)
+## Test Results Template
 
 | Test ID | Description | Status | Notes |
 |---------|-------------|--------|-------|
-| TEST-001 | Initialize Test Repository | PASS | Created main with initial commit, feature/test-feature with 2 additional commits |
-| TEST-002 | Create Review Request | PASS | Review created successfully |
-| TEST-003 | List Reviews | PASS | All formats (table, json, oneline) work correctly |
-| TEST-004 | Show Review Details | PASS | Works with --diff, --comments, --json options |
-| TEST-005 | Add Comments | PASS | General, inline, and reply comments with full hash parent references |
-| TEST-006 | Accept Review | PASS | Review state changed to "accepted" |
-| TEST-007 | Reject Review | PASS | Review state changed to "rejected" |
-| TEST-008 | Submit Review | PASS | Fast-forward merge successful, state changed to "submitted" |
-| TEST-009 | Abandon Review | PASS | Timestamp collision fixed - state correctly shows "abandoned" |
-| TEST-010 | Push Notes | PASS | Notes refs pushed to remote bare repository |
-| TEST-011 | Pull Notes | PASS | Notes refs pulled to clone, reviews accessible |
-| TEST-012 | CI Results | PASS | CI record and status commands work correctly |
-| TEST-013 | Analysis Results | PASS | Analysis record and status commands work correctly |
-| TEST-014 | Configuration | PASS | Config set, get, and list commands work correctly |
-
-## Resolved Issues
-
-### ISSUE-001: Timestamp Collision in Same-Second Operations (FIXED)
-
-**Fix Applied**: Added stable sort with array index as tiebreaker in `src/types/review.ts`.
-
-When timestamps are equal, the sort now uses array index as secondary sort key. Git notes append new entries at the end of the file, so later index = newer entry.
-
-**Files Modified**:
-- `src/types/review.ts` - Added `sortRequestsByTimestamp()` and `getLatestRequest()`
-- `src/cli/commands/show.ts`, `src/cli/commands/list.ts`, `src/services/review.ts` - Use new helpers
-
-### ISSUE-002: Reply Comments Not Displayed in Tree (FIXED)
-
-**Fix Applied**: Store full hash in parent field instead of short hash in `src/cli/commands/comment.ts`.
-
-When user specifies `--parent <short-hash>`, the command now resolves it to the full 40-character hash before storing. This ensures the `findReplies()` function can match parent references correctly.
-
-**Files Modified**:
-- `src/cli/commands/comment.ts` - Added `findCommentByShortHash()` function to resolve short hashes
+| TEST-001 | Initialize Test Repository | - | - |
+| TEST-002 | Add Comment to Commit | - | - |
+| TEST-003 | List Commits with Comments | - | - |
+| TEST-004 | Show Comments for Commit | - | - |
+| TEST-005 | Add Various Comment Types | - | - |
+| TEST-006 | Push Notes | - | - |
+| TEST-007 | Pull Notes | - | - |
+| TEST-008 | Configuration | - | - |
 
 ## Execution Commands
 
 To reproduce these tests:
 
 ```bash
-# Navigate to project root
-cd /g/gits/tacogips/git-xnotes
+# Navigate to project root (git-xnotes repository)
+cd <project-root>
 
 # Run the main.ts with bun
 alias xnotes="bun run src/main.ts"
@@ -299,8 +185,8 @@ git checkout -b feature/test-feature
 echo 'export function world() { return "World"; }' >> src/test.ts
 git add . && git commit -m "Add world function"
 
-# TEST-002: Request
-xnotes request -t main -m "Test review"
+# TEST-002: Add Comment
+xnotes comment HEAD -m "Test comment on feature branch"
 
 # TEST-003: List
 xnotes list
@@ -310,54 +196,29 @@ xnotes list --format oneline
 # TEST-004: Show
 xnotes show
 xnotes show --json
-xnotes show --diff
 
-# TEST-005: Comment
-xnotes comment -m "General comment"
-xnotes comment -m "Inline comment" -f src/test.ts -l 2
-xnotes comment -m "Reply" --parent <hash>
+# TEST-005: Comment types
+xnotes comment HEAD -m "General comment"
+xnotes comment HEAD -m "Inline comment" -f src/test.ts -l 2
+# Get the hash of a previous comment and use it as parent
+COMMENT_HASH=$(xnotes show --json | jq -r '.comments[0].hash')
+xnotes comment HEAD -m "Reply" --parent $COMMENT_HASH
 
-# TEST-006: Accept
-xnotes accept -m "LGTM"
-
-# TEST-008: Submit
-xnotes submit
-
-# TEST-007: Reject (create new branch first)
-git checkout main && git checkout -b feature/needs-work
-echo 'function broken() {}' >> src/test.ts
-git add . && git commit -m "Add broken"
-xnotes request -t main -m "Broken feature"
-xnotes reject -m "Needs work"
-
-# TEST-009: Abandon (create new branch first)
-git checkout main && git checkout -b feature/to-abandon
-echo 'function deprecated() {}' >> src/test.ts
-git add . && git commit -m "Add deprecated"
-xnotes request -t main -m "Deprecated"
-sleep 1  # Wait to avoid timestamp collision
-xnotes abandon
-
-# TEST-010: Push
-git clone --bare . ../sandbox-bare/repo.git
+# TEST-006: Push
+cd ..
+git clone --bare sandbox-git sandbox-bare/repo.git
+cd sandbox-git
 git remote add origin ../sandbox-bare/repo.git
 xnotes push
 
-# TEST-011: Pull
-git clone ../sandbox-bare/repo.git ../sandbox-clone
-cd ../sandbox-clone
+# TEST-007: Pull
+cd ..
+git clone sandbox-bare/repo.git sandbox-clone
+cd sandbox-clone
 xnotes pull
-xnotes list --all
+xnotes list
 
-# TEST-012: CI
-xnotes ci record <commit> --agent "github-actions" --status success --url "https://example.com"
-xnotes ci status <commit>
-
-# TEST-013: Analysis
-xnotes analysis record <commit> --status lgtm --url "https://example.com"
-xnotes analysis status <commit>
-
-# TEST-014: Config
+# TEST-008: Config
 xnotes config set debug true
 xnotes config get debug
 xnotes config list

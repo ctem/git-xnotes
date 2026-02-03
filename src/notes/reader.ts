@@ -7,14 +7,8 @@
 import { exec } from "../git/commands.js";
 import { parseNotesList } from "../git/parser.js";
 import {
-  type ReviewRequest,
-  parseReviewRequest,
   type Comment,
   parseComment,
-  type CIResult,
-  parseCIResult,
-  type AnalysisResult,
-  parseAnalysisResult,
 } from "../types/index.js";
 import { type NotesRefType, getNotesRef } from "./refs.js";
 
@@ -117,20 +111,6 @@ export async function listNotesCommits(
 }
 
 /**
- * Reads review requests for a commit.
- *
- * @param commit - Commit hash
- * @param options - Read options
- * @returns Array of ReviewRequest objects
- */
-export async function readReviewRequests(
-  commit: string,
-  options?: ReadNotesOptions
-): Promise<ReviewRequest[]> {
-  return readNote("reviews", commit, parseReviewRequest, options);
-}
-
-/**
  * Reads comments for a commit.
  *
  * @param commit - Commit hash
@@ -142,56 +122,6 @@ export async function readComments(
   options?: ReadNotesOptions
 ): Promise<Comment[]> {
   return readNote("discuss", commit, parseComment, options);
-}
-
-/**
- * Reads CI results for a commit.
- *
- * @param commit - Commit hash
- * @param options - Read options
- * @returns Array of CIResult objects
- */
-export async function readCIResults(
-  commit: string,
-  options?: ReadNotesOptions
-): Promise<CIResult[]> {
-  return readNote("ci", commit, parseCIResult, options);
-}
-
-/**
- * Reads analysis results for a commit.
- *
- * @param commit - Commit hash
- * @param options - Read options
- * @returns Array of AnalysisResult objects
- */
-export async function readAnalysisResults(
-  commit: string,
-  options?: ReadNotesOptions
-): Promise<AnalysisResult[]> {
-  return readNote("analyses", commit, parseAnalysisResult, options);
-}
-
-/**
- * Reads all review requests from the repository.
- *
- * @param options - Read options
- * @returns Map of commit hash to ReviewRequest array
- */
-export async function readAllReviewRequests(
-  options?: ReadNotesOptions
-): Promise<Map<string, ReviewRequest[]>> {
-  const commits = await listNotesCommits("reviews", options);
-  const result = new Map<string, ReviewRequest[]>();
-
-  for (const commit of commits.keys()) {
-    const requests = await readReviewRequests(commit, options);
-    if (requests.length > 0) {
-      result.set(commit, requests);
-    }
-  }
-
-  return result;
 }
 
 /**

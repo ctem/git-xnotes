@@ -4,14 +4,14 @@ This document describes system architecture and design decisions for git-xnotes.
 
 ## Overview
 
-git-xnotes is a distributed code review annotation system that stores review data as git notes. Inspired by git-appraise, it provides a modern TypeScript/Bun implementation with improved GitHub integration.
+git-xnotes is a distributed comment system that stores comments as git notes. Inspired by git-appraise, it provides a modern TypeScript/Bun implementation with GitHub integration.
 
 ### Core Principles
 
-1. **Distributed Storage**: All review data stored in git notes, travels with the repository
+1. **Distributed Storage**: All comment data stored in git notes, travels with the repository
 2. **No Server Required**: Works with any git hosting provider
 3. **Merge-Friendly Format**: Single-line JSON enables automatic merge via `cat_sort_uniq`
-4. **GitHub Integration**: First-class support for GitHub PR synchronization
+4. **GitHub Integration**: Support for GitHub PR comment synchronization
 
 ---
 
@@ -22,22 +22,22 @@ git-xnotes is a distributed code review annotation system that stores review dat
 ```
 +--------------------------------------------------+
 |                    CLI Layer                      |
-|  (Commander.js commands: request, comment, etc.) |
+|  (Commander.js commands: comment, list, show)    |
 +--------------------------------------------------+
                         |
 +--------------------------------------------------+
-|                 Service Layer                     |
-|   (Business logic, validation, orchestration)    |
+|                 Notes Layer                       |
+|   (Read/write git notes, JSON serialization)     |
 +--------------------------------------------------+
           |                     |
 +-----------------+    +------------------+
-|  Notes Layer    |    |  GitHub Layer    |
-| (git notes ops) |    |  (API sync)      |
+|   Git Layer     |    |  GitHub Layer    |
+| (git commands)  |    |  (API sync)      |
 +-----------------+    +------------------+
           |                     |
 +-----------------+    +------------------+
-|   Git Layer     |    |   HTTP Layer     |
-| (git commands)  |    |  (fetch/Octokit) |
+|   Process       |    |   HTTP Layer     |
+| (Bun.spawn)     |    |  (fetch/Octokit) |
 +-----------------+    +------------------+
 ```
 
@@ -45,8 +45,7 @@ git-xnotes is a distributed code review annotation system that stores review dat
 
 | Layer | Responsibility | Dependencies |
 |-------|----------------|--------------|
-| CLI | Parse arguments, invoke services, format output | Service |
-| Service | Business logic, validation, cross-layer coordination | Notes, GitHub |
+| CLI | Parse arguments, invoke notes layer, format output | Notes |
 | Notes | Read/write git notes, JSON serialization | Git |
 | GitHub | PR sync, comment mirroring, API operations | HTTP |
 | Git | Execute git commands, parse output | Process (Bun) |
@@ -60,10 +59,7 @@ git-xnotes is a distributed code review annotation system that stores review dat
 
 | Ref | Purpose | Annotates |
 |-----|---------|-----------|
-| `refs/notes/xnotes/reviews` | Review requests | First commit in review |
-| `refs/notes/xnotes/discuss` | Human comments | First commit in review |
-| `refs/notes/xnotes/ci` | CI build results | Tested revision |
-| `refs/notes/xnotes/analyses` | Robot/static analysis | Analyzed revision |
+| `refs/notes/xnotes/discuss` | Human comments | Any commit |
 
 ### Data Format
 
@@ -72,26 +68,6 @@ Each note entry is a **single line of JSON**. Multiple entries per note are allo
 ---
 
 ## Core Data Types
-
-### Review Request
-
-```typescript
-interface ReviewRequest {
-  timestamp: string;        // Unix timestamp
-  requester: string;        // Email address
-  baseCommit?: string;      // Base commit hash
-  reviewRef: string;        // Source branch ref
-  targetRef: string;        // Target branch ref (e.g., refs/heads/main)
-  reviewers?: string[];     // Reviewer email addresses
-  description?: string;     // Review description
-  alias?: string;           // Alternate commit hash
-  resolved?: boolean;       // Review accepted/rejected
-  submitted?: boolean;      // Merged to target
-  v: number;                // Schema version (0)
-}
-```
-
-Required fields: `timestamp`, `requester`, `reviewRef`, `targetRef`, `v`
 
 ### Comment
 
@@ -123,82 +99,42 @@ interface LineRange {
 
 Required fields: `timestamp`, `author`, `description`, `v`
 
-### CI Result
-
-```typescript
-interface CIResult {
-  timestamp: string;        // Unix timestamp
-  agent: string;            // CI system identifier
-  status: CIStatus;         // Build status
-  url?: string;             // Link to CI build
-  v: number;                // Schema version (0)
-}
-
-type CIStatus = 'success' | 'failure' | 'pending';
-```
-
-Required fields: `timestamp`, `agent`, `status`, `v`
-
-### Analysis Result
-
-```typescript
-interface AnalysisResult {
-  timestamp: string;        // Unix timestamp
-  url: string;              // Link to analysis results
-  status: AnalysisStatus;   // Analysis verdict
-  v: number;                // Schema version (0)
-}
-
-type AnalysisStatus = 'lgtm' | 'fyi' | 'nmw';  // "needs more work"
-```
-
-Required fields: `timestamp`, `url`, `status`, `v`
-
 ---
 
 ## Directory Structure
 
 ```
 src/
-├── cli/                    # CLI commands
-│   ├── index.ts            # Main CLI entry point
-│   ├── commands/           # Individual command handlers
-│   │   ├── request.ts      # Create review request
-│   │   ├── list.ts         # List reviews
-│   │   ├── show.ts         # Show review details
-│   │   ├── comment.ts      # Add comment
-│   │   ├── accept.ts       # Accept review
-│   │   ├── reject.ts       # Reject review
-│   │   ├── submit.ts       # Merge review
-│   │   ├── abandon.ts      # Abandon review
-│   │   ├── push.ts         # Push notes
-│   │   └── pull.ts         # Pull notes
-│   └── formatters/         # Output formatting
-├── services/               # Business logic
-│   ├── review.ts           # Review management
-│   ├── comment.ts          # Comment management
-│   └── sync.ts             # GitHub sync
-├── notes/                  # Git notes operations
-│   ├── reader.ts           # Read notes
-│   ├── writer.ts           # Write notes
-│   ├── merger.ts           # Merge strategies
-│   └── refs.ts             # Reference management
-├── github/                 # GitHub integration
-│   ├── client.ts           # API client
-│   ├── pr.ts               # PR operations
-│   └── sync.ts             # Bidirectional sync
-├── git/                    # Git command execution
-│   ├── commands.ts         # Git command wrappers
-│   └── parser.ts           # Output parsing
-├── types/                  # Shared type definitions
-│   ├── review.ts           # Review types
-│   ├── comment.ts          # Comment types
-│   ├── ci.ts               # CI types
-│   └── analysis.ts         # Analysis types
-└── utils/                  # Utilities
-    ├── json.ts             # JSON serialization
-    ├── sha.ts              # SHA1 computation
-    └── timestamp.ts        # Timestamp handling
++-- cli/                    # CLI commands
+|   +-- index.ts            # Main CLI entry point
+|   +-- commands/           # Individual command handlers
+|   |   +-- list.ts         # List commits with comments
+|   |   +-- show.ts         # Show comments for a commit
+|   |   +-- comment.ts      # Add comment
+|   |   +-- push.ts         # Push notes
+|   |   +-- pull.ts         # Pull notes
+|   |   +-- sync.ts         # GitHub PR sync
+|   |   +-- config.ts       # Configuration
+|   +-- formatters/         # Output formatting
++-- notes/                  # Git notes operations
+|   +-- reader.ts           # Read notes
+|   +-- writer.ts           # Write notes
+|   +-- merger.ts           # Merge strategies
+|   +-- refs.ts             # Reference management
++-- github/                 # GitHub integration
+|   +-- client.ts           # API client
+|   +-- sync.ts             # Bidirectional sync
++-- git/                    # Git command execution
+|   +-- commands.ts         # Git command wrappers
+|   +-- parser.ts           # Output parsing
++-- types/                  # Shared type definitions
+|   +-- comment.ts          # Comment types
+|   +-- errors.ts           # Error types
++-- utils/                  # Utilities
+    +-- json.ts             # JSON serialization
+    +-- sha.ts              # SHA1 computation
+    +-- timestamp.ts        # Timestamp handling
+    +-- config.ts           # Configuration
 ```
 
 ---
@@ -232,18 +168,18 @@ src/
 - Immutable data model
 - Latest comment in `original` chain is displayed
 
-### Separate Notes Refs per Data Type
+### Single Notes Ref for Comments
 
-**Decision**: Use separate git notes refs for reviews, comments, CI, and analyses.
+**Decision**: Use a single git notes ref (`refs/notes/xnotes/discuss`) for all comments.
 
 **Rationale**:
-- Clear separation of concerns
-- Selective sync (can pull only reviews, not all data)
-- Simpler querying per data type
+- Simple mental model for users
+- All comments stored together
+- Easy to sync with single push/pull
 
 ---
 
-## GitHub Integration (Phase 2)
+## GitHub Integration
 
 ### Synchronization Strategy
 
@@ -252,16 +188,14 @@ GitHub PR <---> git-xnotes
    |               |
    |-- Comments -->|  (mirror PR comments to notes)
    |<-- Comments --|  (mirror notes comments to PR)
-   |-- Status ---->|  (sync PR approval state)
-   |<-- Submit ----|  (trigger PR merge)
 ```
 
 ### Sync Modes
 
 | Mode | Description |
 |------|-------------|
-| `pull` | Import PR data to git notes |
-| `push` | Export git notes to PR comments |
+| `pull` | Import PR comments to git notes |
+| `push` | Export git notes comments to PR |
 | `bidirectional` | Full two-way sync |
 
 ---
@@ -272,9 +206,9 @@ GitHub PR <---> git-xnotes
 
 | Category | HTTP-like Code | Example |
 |----------|---------------|---------|
-| ValidationError | 400 | Invalid review request format |
-| NotFoundError | 404 | Review not found |
-| ConflictError | 409 | Review already submitted |
+| ValidationError | 400 | Invalid comment format |
+| NotFoundError | 404 | Commit not found |
+| ConflictError | 409 | Concurrent edit conflict |
 | GitError | 500 | Git command failed |
 | NetworkError | 503 | GitHub API unavailable |
 
@@ -311,82 +245,53 @@ interface XNotesError {
 
 ---
 
-## Implementation Phases
-
-### Phase 1: Core Local Operations
-
-- Git notes read/write operations
-- Data type schemas and validation
-- Basic CLI commands (request, list, show, comment)
-- Notes push/pull
-
-### Phase 2: Review Workflow
-
-- Accept/reject commands
-- Submit (merge) command
-- Review state machine
-- Comment threading and resolution
-
-### Phase 3: GitHub Integration
-
-- GitHub API client
-- PR comment sync
-- Bidirectional synchronization
-- Status checks integration
-
-### Phase 4: Advanced Features
-
-- Analysis results integration
-- CI status tracking
-- Web UI (optional)
-- IDE plugins (optional)
-
----
-
 ## Usage Modes
 
-git-xnotes can be used in three modes:
+git-xnotes can be used in two modes:
 
 ### 1. CLI Tool
 
 ```bash
-# Create a review request
-git-xnotes request --target main
+# Add a comment to a commit
+git-xnotes comment HEAD -m "Great implementation!"
 
-# List reviews
+# Add an inline comment
+git-xnotes comment HEAD -m "Consider using const" -f src/main.ts -l 42
+
+# List commits with comments
 git-xnotes list
 
-# Add a comment
-git-xnotes comment <commit> -m "Review comment"
+# Show comments for a commit
+git-xnotes show HEAD
+
+# Push/pull notes
+git-xnotes push
+git-xnotes pull
 ```
 
 ### 2. Library (TypeScript)
 
 ```typescript
 import {
-  readReviewRequests,
-  getReview,
+  readComments,
+  listNotesCommits,
   createComment,
   appendComment,
 } from 'git-xnotes';
 
-// Read reviews from a specific git repository
-const reviews = await readReviewRequests(commit, { cwd: '/path/to/repo' });
+// Read comments from a specific git repository
+const comments = await readComments(commit, { cwd: '/path/to/repo' });
 
-// Get review info with full context
-const review = await getReview(commit, { cwd: '/path/to/repo' });
+// List commits with comments
+const commits = await listNotesCommits('discuss', { cwd: '/path/to/repo' });
 
 // Add a comment
 const comment = createComment({
-  author: 'reviewer@example.com',
+  author: 'user@example.com',
   description: 'Looks good!',
 });
 await appendComment(commit, comment, { cwd: '/path/to/repo' });
 ```
-
-### 3. MCP Server (Planned)
-
-For AI agent integration via Model Context Protocol.
 
 See [Library API Specification](./library-api.md) for detailed API reference.
 
@@ -395,5 +300,4 @@ See [Library API Specification](./library-api.md) for detailed API reference.
 ## References
 
 - [Library API Specification](./library-api.md)
-- [git-appraise Analysis](../references/git-appraise-analysis.md)
 - [Git Notes Documentation](https://git-scm.com/docs/git-notes)

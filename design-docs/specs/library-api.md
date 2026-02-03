@@ -4,7 +4,7 @@ This document describes the TypeScript Library API for git-xnotes.
 
 ## Overview
 
-git-xnotes exports a comprehensive API for programmatic access to git notes-based code review functionality. All async functions accept an optional `cwd` parameter to specify the target git repository.
+git-xnotes exports a comprehensive API for programmatic access to git notes-based comment functionality. All async functions accept an optional `cwd` parameter to specify the target git repository.
 
 ## Installation
 
@@ -20,22 +20,22 @@ npm install git-xnotes
 
 ```typescript
 import {
-  readReviewRequests,
-  getReview,
+  readComments,
+  listNotesCommits,
   createComment,
   appendComment,
   pushAllNotes,
 } from 'git-xnotes';
 
-// Read all review requests for a commit
-const reviews = await readReviewRequests(commitHash, { cwd: '/path/to/repo' });
+// List all commits with comments
+const commits = await listNotesCommits('discuss', { cwd: '/path/to/repo' });
 
-// Get full review info including state
-const review = await getReview(commitHash);
+// Read comments for a commit
+const comments = await readComments(commitHash);
 
 // Create and append a comment
 const comment = createComment({
-  author: 'reviewer@example.com',
+  author: 'user@example.com',
   description: 'LGTM!',
 });
 await appendComment(commitHash, comment);
@@ -180,14 +180,11 @@ import {
 const NOTES_REF_PREFIX = 'refs/notes/xnotes';
 
 const NOTES_REFS = {
-  reviews: 'refs/notes/xnotes/reviews',
   discuss: 'refs/notes/xnotes/discuss',
-  ci: 'refs/notes/xnotes/ci',
-  analyses: 'refs/notes/xnotes/analyses',
 };
 
-type NotesRefType = 'reviews' | 'discuss' | 'ci' | 'analyses';
-const ALL_REF_TYPES: NotesRefType[] = ['reviews', 'discuss', 'ci', 'analyses'];
+type NotesRefType = 'discuss';
+const ALL_REF_TYPES: NotesRefType[] = ['discuss'];
 ```
 
 #### Functions
@@ -209,11 +206,7 @@ import {
   readNoteRaw,
   readNote,
   listNotesCommits,
-  readReviewRequests,
   readComments,
-  readCIResults,
-  readAnalysisResults,
-  readAllReviewRequests,
   notesRefExists,
 } from 'git-xnotes';
 ```
@@ -233,11 +226,7 @@ interface ReadNotesOptions {
 | `readNoteRaw(ref, commit, options?)` | Read raw note content | `Promise<string \| null>` |
 | `readNote(ref, commit, parser, options?)` | Read and parse notes | `Promise<T[]>` |
 | `listNotesCommits(ref, options?)` | List commits with notes | `Promise<Map<string, string>>` |
-| `readReviewRequests(commit, options?)` | Read review requests | `Promise<ReviewRequest[]>` |
 | `readComments(commit, options?)` | Read comments | `Promise<Comment[]>` |
-| `readCIResults(commit, options?)` | Read CI results | `Promise<CIResult[]>` |
-| `readAnalysisResults(commit, options?)` | Read analysis results | `Promise<AnalysisResult[]>` |
-| `readAllReviewRequests(options?)` | Read all reviews in repo | `Promise<Map<string, ReviewRequest[]>>` |
 | `notesRefExists(ref, options?)` | Check if notes ref exists | `Promise<boolean>` |
 
 ---
@@ -252,10 +241,7 @@ import {
   appendNote,
   replaceNote,
   removeNote,
-  appendReviewRequest,
   appendComment,
-  appendCIResult,
-  appendAnalysisResult,
 } from 'git-xnotes';
 ```
 
@@ -275,10 +261,7 @@ interface WriteNotesOptions {
 | `appendNote(ref, commit, data, serializer, options?)` | Append typed data | `Promise<void>` |
 | `replaceNote(ref, commit, items, serializer, options?)` | Replace all notes | `Promise<void>` |
 | `removeNote(ref, commit, options?)` | Remove note | `Promise<void>` |
-| `appendReviewRequest(commit, request, options?)` | Append review request | `Promise<void>` |
 | `appendComment(commit, comment, options?)` | Append comment | `Promise<void>` |
-| `appendCIResult(commit, result, options?)` | Append CI result | `Promise<void>` |
-| `appendAnalysisResult(commit, result, options?)` | Append analysis result | `Promise<void>` |
 
 ---
 
@@ -355,146 +338,12 @@ const MERGE_STRATEGY = 'cat_sort_uniq';
 
 ---
 
-### Review Service
-
-High-level review workflow operations.
-
-```typescript
-import {
-  getReview,
-  acceptReview,
-  rejectReview,
-  submitReview,
-  abandonReview,
-} from 'git-xnotes';
-```
-
-#### Types
-
-```typescript
-interface ReviewServiceOptions {
-  cwd?: string;
-}
-
-interface ReviewInfo {
-  commit: string;
-  requests: ReviewRequest[];
-  state: ReviewState;
-  latest: ReviewRequest | undefined;
-}
-
-interface SubmitOptions extends ReviewServiceOptions {
-  noMerge?: boolean;  // Skip actual merge
-}
-
-type ReviewState = 'open' | 'accepted' | 'rejected' | 'submitted' | 'abandoned';
-```
-
-#### Functions
-
-| Function | Description | Returns |
-|----------|-------------|---------|
-| `getReview(commit, options?)` | Get review info | `Promise<ReviewInfo>` |
-| `acceptReview(commit, reviewer, options?)` | Accept review | `Promise<void>` |
-| `rejectReview(commit, reviewer, reason?, options?)` | Reject review | `Promise<void>` |
-| `submitReview(commit, submitter, options?)` | Submit (merge) review | `Promise<void>` |
-| `abandonReview(commit, user, reason?, options?)` | Abandon review | `Promise<void>` |
-
----
-
-### CI Service
-
-CI status tracking operations.
-
-```typescript
-import {
-  getCIStatus,
-  recordCIResult,
-  isCIPassing,
-  getCIResultsByAgent,
-} from 'git-xnotes';
-```
-
-#### Types
-
-```typescript
-interface CIServiceOptions {
-  cwd?: string;
-}
-
-interface CIStatusSummary {
-  overall: CIStatus;
-  results: CIResult[];
-  byAgent: Map<string, CIResult>;
-}
-
-type CIStatus = 'success' | 'failure' | 'pending';
-```
-
-#### Functions
-
-| Function | Description | Returns |
-|----------|-------------|---------|
-| `getCIStatus(commit, options?)` | Get CI status summary | `Promise<CIStatusSummary>` |
-| `recordCIResult(commit, result, options?)` | Record CI result | `Promise<void>` |
-| `isCIPassing(commit, options?)` | Check if CI passes | `Promise<boolean>` |
-| `getCIResultsByAgent(commit, options?)` | Get results by agent | `Promise<Map<string, CIResult>>` |
-
----
-
-### Analysis Service
-
-Static analysis tracking operations.
-
-```typescript
-import {
-  getAnalysisStatus,
-  recordAnalysisResult,
-  getLatestAnalysisResult,
-  needsAttention,
-  isAnalysisPassing,
-} from 'git-xnotes';
-```
-
-#### Types
-
-```typescript
-interface AnalysisServiceOptions {
-  cwd?: string;
-}
-
-interface AnalysisStatusSummary {
-  overall: AnalysisStatus;
-  results: AnalysisResult[];
-}
-
-type AnalysisStatus = 'lgtm' | 'fyi' | 'nmw';  // "needs more work"
-```
-
-#### Functions
-
-| Function | Description | Returns |
-|----------|-------------|---------|
-| `getAnalysisStatus(commit, options?)` | Get analysis summary | `Promise<AnalysisStatusSummary>` |
-| `recordAnalysisResult(commit, result, options?)` | Record analysis | `Promise<void>` |
-| `isAnalysisPassing(commit, options?)` | Check if analysis passes | `Promise<boolean>` |
-| `needsAttention(commit, options?)` | Check if needs attention | `Promise<boolean>` |
-
----
-
 ### Type Utilities
 
-Factory functions and validators for data types.
+Factory functions and validators for comment types.
 
 ```typescript
 import {
-  // Review
-  createReviewRequest,
-  parseReviewRequest,
-  serializeReviewRequest,
-  validateReviewRequest,
-  getReviewState,
-
   // Comment
   createComment,
   parseComment,
@@ -502,18 +351,6 @@ import {
   validateComment,
   computeCommentHash,
   buildCommentTree,
-
-  // CI
-  createCIResult,
-  parseCIResult,
-  serializeCIResult,
-  validateCIResult,
-
-  // Analysis
-  createAnalysisResult,
-  parseAnalysisResult,
-  serializeAnalysisResult,
-  validateAnalysisResult,
 } from 'git-xnotes';
 ```
 
@@ -531,7 +368,6 @@ import {
   ConflictError,
   GitError,
   NetworkError,
-  StateError,
   isXNotesError,
   isXNotesErrorWithCode,
   wrapError,
@@ -548,21 +384,19 @@ import {
 | `ConflictError` | 409 | State conflict |
 | `GitError` | 500 | Git command failed |
 | `NetworkError` | 503 | Network/remote error |
-| `StateError` | 409 | Invalid state transition |
 
 #### Example
 
 ```typescript
-import { getReview, NotFoundError, StateError } from 'git-xnotes';
+import { readComments, NotFoundError, ValidationError } from 'git-xnotes';
 
 try {
-  const review = await getReview(commit);
-  await submitReview(commit, 'user@example.com');
+  const comments = await readComments(commit);
 } catch (error) {
   if (error instanceof NotFoundError) {
-    console.error('Review not found');
-  } else if (error instanceof StateError) {
-    console.error('Cannot submit:', error.message);
+    console.error('Commit not found');
+  } else if (error instanceof ValidationError) {
+    console.error('Invalid input:', error.message);
   }
 }
 ```
@@ -570,24 +404,6 @@ try {
 ---
 
 ## Data Types Reference
-
-### ReviewRequest
-
-```typescript
-interface ReviewRequest {
-  timestamp: string;        // Unix timestamp in seconds
-  requester: string;        // Email address
-  reviewRef: string;        // Source branch (refs/heads/...)
-  targetRef: string;        // Target branch (refs/heads/...)
-  baseCommit?: string;      // Base commit hash
-  reviewers?: string[];     // Reviewer emails
-  description?: string;     // Review description
-  alias?: string;           // Alternate commit reference
-  resolved?: boolean;       // true=accepted, false=rejected
-  submitted?: boolean;      // true=merged
-  v: number;                // Schema version (0)
-}
-```
 
 ### Comment
 
@@ -617,29 +433,6 @@ interface LineRange {
 }
 ```
 
-### CIResult
-
-```typescript
-interface CIResult {
-  timestamp: string;        // Unix timestamp
-  agent: string;            // CI system identifier
-  status: CIStatus;         // 'success' | 'failure' | 'pending'
-  url?: string;             // Link to CI build
-  v: number;                // Schema version (0)
-}
-```
-
-### AnalysisResult
-
-```typescript
-interface AnalysisResult {
-  timestamp: string;        // Unix timestamp
-  url: string;              // Link to analysis results
-  status: AnalysisStatus;   // 'lgtm' | 'fyi' | 'nmw'
-  v: number;                // Schema version (0)
-}
-```
-
 ---
 
 ## Working with Multiple Repositories
@@ -648,15 +441,15 @@ All async functions accept a `cwd` option to specify the target repository:
 
 ```typescript
 // Work with a specific repository
-const reviews = await readAllReviewRequests({ cwd: '/path/to/repo' });
+const comments = await readComments(commit, { cwd: '/path/to/repo' });
 
 // Work with current directory (default)
-const reviews = await readAllReviewRequests();
+const comments = await readComments(commit);
 
 // Multiple repositories
 const repos = ['/repo1', '/repo2', '/repo3'];
-const allReviews = await Promise.all(
-  repos.map(cwd => readAllReviewRequests({ cwd }))
+const allComments = await Promise.all(
+  repos.map(cwd => readComments(commit, { cwd }))
 );
 ```
 

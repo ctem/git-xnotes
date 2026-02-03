@@ -13,10 +13,7 @@ export const NOTES_REF_PREFIX = "refs/notes/xnotes";
  * Notes reference types
  */
 export const NOTES_REFS = {
-  reviews: `${NOTES_REF_PREFIX}/reviews`,
   discuss: `${NOTES_REF_PREFIX}/discuss`,
-  ci: `${NOTES_REF_PREFIX}/ci`,
-  analyses: `${NOTES_REF_PREFIX}/analyses`,
 } as const;
 
 /**
@@ -28,10 +25,7 @@ export type NotesRefType = keyof typeof NOTES_REFS;
  * All valid notes reference types
  */
 export const ALL_REF_TYPES: readonly NotesRefType[] = [
-  "reviews",
   "discuss",
-  "ci",
-  "analyses",
 ];
 
 /**

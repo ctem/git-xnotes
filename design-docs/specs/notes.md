@@ -4,7 +4,7 @@ This document describes git notes storage format, operations, and merge strategi
 
 ## Overview
 
-git-xnotes uses git notes as the underlying storage mechanism for all review data. Git notes allow attaching metadata to commits without modifying the commits themselves.
+git-xnotes uses git notes as the underlying storage mechanism for all comment data. Git notes allow attaching metadata to commits without modifying the commits themselves.
 
 ---
 
@@ -16,24 +16,12 @@ All git-xnotes data is stored under the `refs/notes/xnotes/` namespace:
 
 | Ref | Purpose | Annotates |
 |-----|---------|-----------|
-| `refs/notes/xnotes/reviews` | Review requests | First commit in review branch |
-| `refs/notes/xnotes/discuss` | Human comments | First commit in review branch |
-| `refs/notes/xnotes/ci` | CI build results | Tested commit |
-| `refs/notes/xnotes/analyses` | Static analysis results | Analyzed commit |
+| `refs/notes/xnotes/discuss` | Human comments | Any commit |
 
 ### Reference Configuration
 
 ```ini
-[notes "xnotes/reviews"]
-  mergeStrategy = cat_sort_uniq
-
 [notes "xnotes/discuss"]
-  mergeStrategy = cat_sort_uniq
-
-[notes "xnotes/ci"]
-  mergeStrategy = cat_sort_uniq
-
-[notes "xnotes/analyses"]
   mergeStrategy = cat_sort_uniq
 ```
 
@@ -53,35 +41,13 @@ Each data entry is stored as a **single line of JSON**. This format is critical 
 ### Example Note Content
 
 ```
-{"timestamp":"1704067200","requester":"alice@example.com","reviewRef":"refs/heads/feature","targetRef":"refs/heads/main","v":0}
-{"timestamp":"1704067500","requester":"alice@example.com","reviewRef":"refs/heads/feature","targetRef":"refs/heads/main","resolved":true,"v":0}
+{"timestamp":"1704067200","author":"alice@example.com","description":"Looks good!","v":0}
+{"timestamp":"1704067500","author":"bob@example.com","description":"Agreed, nice work.","v":0}
 ```
 
 ---
 
 ## Schema Definitions
-
-### Review Request
-
-```typescript
-interface ReviewRequest {
-  timestamp: string;        // Unix timestamp (seconds)
-  requester: string;        // Email address
-  reviewRef: string;        // Source branch ref
-  targetRef: string;        // Target branch ref
-  baseCommit?: string;      // Base commit hash
-  reviewers?: string[];     // Reviewer email addresses
-  description?: string;     // Review description
-  alias?: string;           // Alternate commit reference
-  resolved?: boolean;       // true = accepted, false = rejected
-  submitted?: boolean;      // true = merged to target
-  v: number;                // Schema version (currently 0)
-}
-```
-
-**Required fields**: `timestamp`, `requester`, `reviewRef`, `targetRef`, `v`
-
-**Note**: Multiple ReviewRequest entries for the same review commit represent state transitions. The latest entry (by timestamp) represents current state.
 
 ### Comment
 
@@ -126,33 +92,6 @@ function computeCommentHash(comment: Comment): string {
 }
 ```
 
-### CI Result
-
-```typescript
-interface CIResult {
-  timestamp: string;        // Unix timestamp (seconds)
-  agent: string;            // CI system identifier
-  status: 'success' | 'failure' | 'pending';
-  url?: string;             // Link to CI build
-  v: number;                // Schema version (currently 0)
-}
-```
-
-**Required fields**: `timestamp`, `agent`, `status`, `v`
-
-### Analysis Result
-
-```typescript
-interface AnalysisResult {
-  timestamp: string;        // Unix timestamp (seconds)
-  url: string;              // Link to analysis results
-  status: 'lgtm' | 'fyi' | 'nmw';  // lgtm=ok, fyi=info, nmw=needs work
-  v: number;                // Schema version (currently 0)
-}
-```
-
-**Required fields**: `timestamp`, `url`, `status`, `v`
-
 ---
 
 ## Git Notes Operations
@@ -161,40 +100,37 @@ interface AnalysisResult {
 
 ```bash
 # Read all notes for a commit
-git notes --ref=refs/notes/xnotes/reviews show <commit>
+git notes --ref=refs/notes/xnotes/discuss show <commit>
 
 # List all annotated commits
-git notes --ref=refs/notes/xnotes/reviews list
+git notes --ref=refs/notes/xnotes/discuss list
 ```
 
 ### Writing Notes
 
 ```bash
 # Add a note (appends if note exists)
-git notes --ref=refs/notes/xnotes/reviews append -m '{"json":"data"}' <commit>
+git notes --ref=refs/notes/xnotes/discuss append -m '{"json":"data"}' <commit>
 
 # Replace entire note content
-git notes --ref=refs/notes/xnotes/reviews add -f -m '{"json":"data"}' <commit>
+git notes --ref=refs/notes/xnotes/discuss add -f -m '{"json":"data"}' <commit>
 ```
 
 ### Pushing Notes
 
 ```bash
-# Push specific notes ref
-git push origin refs/notes/xnotes/reviews:refs/notes/xnotes/reviews
-
-# Push all xnotes refs
-git push origin 'refs/notes/xnotes/*:refs/notes/xnotes/*'
+# Push notes ref
+git push origin refs/notes/xnotes/discuss:refs/notes/xnotes/discuss
 ```
 
 ### Pulling Notes
 
 ```bash
 # Fetch notes ref
-git fetch origin refs/notes/xnotes/reviews:refs/notes/xnotes/reviews
+git fetch origin refs/notes/xnotes/discuss:refs/notes/xnotes/discuss
 
 # Merge remote notes with local
-git notes --ref=refs/notes/xnotes/reviews merge origin/refs/notes/xnotes/reviews
+git notes --ref=refs/notes/xnotes/discuss merge origin/refs/notes/xnotes/discuss
 ```
 
 ---
@@ -203,7 +139,7 @@ git notes --ref=refs/notes/xnotes/reviews merge origin/refs/notes/xnotes/reviews
 
 ### cat_sort_uniq
 
-The `cat_sort_uniq` merge strategy is used for all notes refs:
+The `cat_sort_uniq` merge strategy is used for the discuss notes ref:
 
 1. **Concatenate**: Combine all lines from both versions
 2. **Sort**: Sort lines lexicographically
@@ -217,30 +153,17 @@ This strategy ensures:
 ### Configuration
 
 ```bash
-# Configure merge strategy for all xnotes refs
-git config notes.xnotes/reviews.mergeStrategy cat_sort_uniq
+# Configure merge strategy for discuss ref
 git config notes.xnotes/discuss.mergeStrategy cat_sort_uniq
-git config notes.xnotes/ci.mergeStrategy cat_sort_uniq
-git config notes.xnotes/analyses.mergeStrategy cat_sort_uniq
 ```
 
 ---
 
 ## Annotation Strategy
 
-### Review Requests
-
-Review requests annotate the **first commit** in the review branch (the commit that diverges from the target branch).
-
-```
-main:     A---B---C
-                   \
-feature:            D---E---F  <-- ReviewRequest attached to D
-```
-
 ### Comments
 
-Comments also annotate the **first commit** in the review branch, but the `location.commit` field specifies which commit the comment actually refers to:
+Comments can be attached to **any commit** in the repository. The `location.commit` field can optionally specify a different commit that the comment refers to (useful for inline comments):
 
 ```typescript
 {
@@ -248,29 +171,13 @@ Comments also annotate the **first commit** in the review branch, but the `locat
   "author": "bob@example.com",
   "description": "This line looks wrong",
   "location": {
-    "commit": "F",  // Comment refers to code in commit F
+    "commit": "abc123",  // Comment refers to code in this commit
     "path": "src/auth.ts",
     "range": { "startLine": 42, "endLine": 42 }
   },
   "v": 0
 }
-// This note is attached to commit D, but comments on commit F
 ```
-
-### CI Results
-
-CI results annotate the **specific commit** that was tested:
-
-```
-main:     A---B---C
-                   \
-feature:            D---E---F
-                            ^-- CI result attached to F
-```
-
-### Analysis Results
-
-Analysis results annotate the **specific commit** that was analyzed (same as CI).
 
 ---
 
@@ -282,9 +189,9 @@ Comments form a tree structure via the `parent` field:
 
 ```
 Comment A (parent: null)
-├── Comment B (parent: hash(A))
-│   └── Comment C (parent: hash(B))
-└── Comment D (parent: hash(A))
++-- Comment B (parent: hash(A))
+|   +-- Comment C (parent: hash(B))
++-- Comment D (parent: hash(A))
 ```
 
 ### Finding Replies
@@ -310,8 +217,8 @@ When a comment is edited, a new comment is created with `original` pointing to t
 
 ```
 Original Comment A
-└── Edit A' (original: hash(A))
-    └── Edit A'' (original: hash(A'))
++-- Edit A' (original: hash(A))
+    +-- Edit A'' (original: hash(A'))
 ```
 
 The latest comment in the chain (A'') should be displayed. Earlier versions are kept for history.
@@ -329,60 +236,7 @@ function getLatestVersion(comments: Comment[], hash: string): Comment {
 
 ---
 
-## Review State Machine
-
-### States
-
-| State | resolved | submitted | Description |
-|-------|----------|-----------|-------------|
-| Open | undefined | undefined | Active review |
-| Accepted | true | undefined | Approved, ready to merge |
-| Rejected | false | undefined | Changes requested |
-| Submitted | true | true | Merged to target |
-| Abandoned | false | true | Closed without merge |
-
-### Transitions
-
-```
-Open ──accept──> Accepted ──submit──> Submitted
-  │                  │
-  │                  └──update──> Open (if changes pushed)
-  │
-  └──reject──> Rejected ──update──> Open (if issues addressed)
-  │
-  └──abandon──> Abandoned
-```
-
-### State Determination
-
-The current state is determined by the **latest** ReviewRequest entry (by timestamp):
-
-```typescript
-function getReviewState(requests: ReviewRequest[]): ReviewState {
-  const latest = requests.sort((a, b) =>
-    parseInt(b.timestamp) - parseInt(a.timestamp)
-  )[0];
-
-  if (latest.submitted) {
-    return latest.resolved ? 'submitted' : 'abandoned';
-  }
-  if (latest.resolved === true) return 'accepted';
-  if (latest.resolved === false) return 'rejected';
-  return 'open';
-}
-```
-
----
-
 ## Validation Rules
-
-### Review Request
-
-1. `timestamp` must be valid Unix timestamp
-2. `requester` must be valid email format
-3. `reviewRef` must start with `refs/heads/`
-4. `targetRef` must start with `refs/heads/`
-5. `v` must be `0` (current version)
 
 ### Comment
 
@@ -421,5 +275,4 @@ function getReviewState(requests: ReviewRequest[]): ReviewState {
 ## References
 
 - [Architecture Design](architecture.md)
-- [git-appraise Analysis](../references/git-appraise-analysis.md)
 - [Git Notes Documentation](https://git-scm.com/docs/git-notes)
