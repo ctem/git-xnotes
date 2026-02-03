@@ -343,7 +343,57 @@ interface XNotesError {
 
 ---
 
+## Usage Modes
+
+git-xnotes can be used in three modes:
+
+### 1. CLI Tool
+
+```bash
+# Create a review request
+git-xnotes request --target main
+
+# List reviews
+git-xnotes list
+
+# Add a comment
+git-xnotes comment <commit> -m "Review comment"
+```
+
+### 2. Library (TypeScript)
+
+```typescript
+import {
+  readReviewRequests,
+  getReview,
+  createComment,
+  appendComment,
+} from 'git-xnotes';
+
+// Read reviews from a specific git repository
+const reviews = await readReviewRequests(commit, { cwd: '/path/to/repo' });
+
+// Get review info with full context
+const review = await getReview(commit, { cwd: '/path/to/repo' });
+
+// Add a comment
+const comment = createComment({
+  author: 'reviewer@example.com',
+  description: 'Looks good!',
+});
+await appendComment(commit, comment, { cwd: '/path/to/repo' });
+```
+
+### 3. MCP Server (Planned)
+
+For AI agent integration via Model Context Protocol.
+
+See [Library API Specification](./library-api.md) for detailed API reference.
+
+---
+
 ## References
 
+- [Library API Specification](./library-api.md)
 - [git-appraise Analysis](../references/git-appraise-analysis.md)
 - [Git Notes Documentation](https://git-scm.com/docs/git-notes)
