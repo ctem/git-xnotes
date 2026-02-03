@@ -6,8 +6,8 @@
 
 import { Command } from "commander";
 import { getHeadCommit, resolveRef, getUserEmail } from "../../git/index.js";
-import { readReviewRequests, appendComment } from "../../notes/index.js";
-import { createComment, computeCommentHash, type CommentLocation } from "../../types/index.js";
+import { readReviewRequests, readComments, appendComment } from "../../notes/index.js";
+import { createComment, computeCommentHash, type CommentLocation, type Comment } from "../../types/index.js";
 import { formatError, formatSuccess } from "../formatters/index.js";
 
 /**
@@ -43,6 +43,31 @@ interface CommentOptions {
   readonly parent?: string;
   readonly resolve: boolean;
   readonly author?: string;
+}
+
+/**
+ * Finds a comment by short hash prefix.
+ *
+ * @param comments - Array of comments to search
+ * @param shortHash - Short hash prefix to match
+ * @returns Matching comment or undefined
+ */
+function findCommentByShortHash(
+  comments: readonly Comment[],
+  shortHash: string
+): Comment | undefined {
+  const matches = comments.filter((c) => {
+    const fullHash = computeCommentHash(c);
+    return fullHash.startsWith(shortHash);
+  });
+
+  if (matches.length === 0) {
+    return undefined;
+  }
+  if (matches.length > 1) {
+    throw new Error(`Ambiguous hash prefix: ${shortHash} matches ${matches.length} comments`);
+  }
+  return matches[0];
 }
 
 async function executeComment(
@@ -93,6 +118,17 @@ async function executeComment(
     }
   }
 
+  // Resolve parent hash to full hash if specified
+  let resolvedParentHash: string | undefined;
+  if (options.parent) {
+    const existingComments = await readComments(commit);
+    const parentComment = findCommentByShortHash(existingComments, options.parent);
+    if (!parentComment) {
+      throw new Error(`Parent comment not found: ${options.parent}`);
+    }
+    resolvedParentHash = computeCommentHash(parentComment);
+  }
+
   // Create the comment
   const commentParams: {
     author: string;
@@ -105,8 +141,8 @@ async function executeComment(
     description: options.message,
   };
 
-  if (options.parent) {
-    commentParams.parent = options.parent;
+  if (resolvedParentHash) {
+    commentParams.parent = resolvedParentHash;
   }
   if (options.resolve) {
     commentParams.resolved = true;

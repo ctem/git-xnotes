@@ -9,6 +9,7 @@ import { getHeadCommit, resolveRef, execOrThrow } from "../../git/index.js";
 import { readReviewRequests, readComments } from "../../notes/index.js";
 import {
   getReviewState,
+  getLatestRequest,
   computeCommentHash,
   buildCommentTree,
   type CommentWithHash,
@@ -68,10 +69,7 @@ async function executeShow(
   }
 
   // Get latest request and status
-  const sorted = [...requests].sort(
-    (a, b) => parseInt(b.timestamp, 10) - parseInt(a.timestamp, 10)
-  );
-  const latest = sorted[0];
+  const latest = getLatestRequest(requests);
   if (!latest) {
     throw new Error(`No review found for commit ${commit.substring(0, 7)}`);
   }

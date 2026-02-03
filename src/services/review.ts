@@ -9,6 +9,7 @@ import {
   type ReviewState,
   type CommentWithHash,
   getReviewState,
+  sortRequestsByTimestamp,
   createReviewRequest,
   createComment,
   computeCommentHash,
@@ -89,11 +90,8 @@ export async function getReview(
     throw new NotFoundError(`No review found for commit: ${resolvedCommit.substring(0, 7)}`);
   }
 
-  // Sort by timestamp descending to get latest first
-  const sortedRequests = [...requests].sort(
-    (a, b) => parseInt(b.timestamp, 10) - parseInt(a.timestamp, 10)
-  );
-
+  // Get latest request using stable sort
+  const sortedRequests = sortRequestsByTimestamp(requests);
   const latestRequest = sortedRequests[0];
   if (!latestRequest) {
     throw new NotFoundError(`No review found for commit: ${resolvedCommit.substring(0, 7)}`);

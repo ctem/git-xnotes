@@ -13,6 +13,8 @@ export {
   REVIEW_SCHEMA_VERSION,
   validateReviewRequest,
   getReviewState,
+  sortRequestsByTimestamp,
+  getLatestRequest,
   serializeReviewRequest,
   parseReviewRequest,
   createReviewRequest,

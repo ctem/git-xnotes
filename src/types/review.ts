@@ -153,23 +153,46 @@ export function validateReviewRequest(data: unknown): ReviewRequest {
 }
 
 /**
+ * Sorts review requests by timestamp descending (newest first).
+ * Uses array index as tiebreaker for stability when timestamps are equal.
+ * Git notes append new entries at the end, so later index = newer entry.
+ *
+ * @param requests - Array of ReviewRequest entries
+ * @returns Sorted array (newest first)
+ */
+export function sortRequestsByTimestamp(requests: readonly ReviewRequest[]): ReviewRequest[] {
+  return [...requests]
+    .map((r, index) => ({ r, index }))
+    .sort((a, b) => {
+      const timeDiff = parseInt(b.r.timestamp, 10) - parseInt(a.r.timestamp, 10);
+      if (timeDiff !== 0) return timeDiff;
+      return b.index - a.index; // Later index = newer
+    })
+    .map(({ r }) => r);
+}
+
+/**
+ * Gets the latest (most recent) ReviewRequest from a list.
+ *
+ * @param requests - Array of ReviewRequest entries
+ * @returns Latest request or undefined if empty
+ */
+export function getLatestRequest(requests: readonly ReviewRequest[]): ReviewRequest | undefined {
+  if (requests.length === 0) return undefined;
+  return sortRequestsByTimestamp(requests)[0];
+}
+
+/**
  * Determines the current review state from a list of ReviewRequest entries.
  * The latest entry (by timestamp) determines the state.
+ * When timestamps are equal, uses array index as tiebreaker (later index = newer).
+ * This ensures stable sorting since git notes append new entries at the end.
  *
  * @param requests - Array of ReviewRequest entries for a review
  * @returns Current ReviewState
  */
 export function getReviewState(requests: readonly ReviewRequest[]): ReviewState {
-  if (requests.length === 0) {
-    return "open";
-  }
-
-  // Sort by timestamp descending to get latest first
-  const sorted = [...requests].sort(
-    (a, b) => parseInt(b.timestamp, 10) - parseInt(a.timestamp, 10)
-  );
-
-  const latest = sorted[0];
+  const latest = getLatestRequest(requests);
   if (latest === undefined) {
     return "open";
   }

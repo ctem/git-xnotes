@@ -6,7 +6,7 @@
 
 import { Command } from "commander";
 import { readAllReviewRequests } from "../../notes/index.js";
-import { getReviewState } from "../../types/index.js";
+import { getReviewState, getLatestRequest } from "../../types/index.js";
 import {
   formatReviewList,
   formatError,
@@ -59,10 +59,7 @@ async function executeList(options: ListOptions): Promise<void> {
     if (requests.length === 0) continue;
 
     // Get the latest request to determine current state
-    const sorted = [...requests].sort(
-      (a, b) => parseInt(b.timestamp, 10) - parseInt(a.timestamp, 10)
-    );
-    const latest = sorted[0];
+    const latest = getLatestRequest(requests);
     if (!latest) continue;
 
     const status = getReviewState(requests);

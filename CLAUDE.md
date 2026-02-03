@@ -307,6 +307,39 @@ Example subtask format:
 **Notes**: Implemented core parsing, tests pending
 ```
 
+## Testing
+
+### Unit Tests
+
+Unit tests are located alongside source files with `.test.ts` extension.
+
+```bash
+bun run test        # Run all unit tests
+bun run test:watch  # Run tests in watch mode
+bun run test:ui     # Run tests with UI
+```
+
+### E2E Integration Tests
+
+E2E test plan is documented in `design-docs/E2E-TEST-PLAN.md`.
+
+**Test Type**: End-to-end integration tests using a sandbox git repository
+
+**Purpose**: Verify all CLI commands work correctly in realistic scenarios
+
+**Sandbox Location**: `.private/sandbox-git/` (temporary, created during test execution)
+
+**How to Run**:
+1. Follow the steps in `design-docs/E2E-TEST-PLAN.md`
+2. Tests use a temporary sandbox git repository
+3. Cleanup: `rm -rf .private/sandbox-git/ .private/sandbox-bare/ .private/sandbox-clone/`
+
+**Test Coverage**:
+- Phase 1: Core operations (request, list, show, comment, push, pull)
+- Phase 2: Review workflow (accept, reject, submit, abandon)
+- Phase 3: Notes synchronization
+- Phase 4: Advanced features (ci, analysis, config)
+
 ## Notes
 - This project uses Nix flakes for reproducible development environments
 - Use direnv for automatic environment activation
