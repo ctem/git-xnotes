@@ -24,6 +24,7 @@ export function registerCommentCommand(program: Command): void {
     .option("-f, --file <path>", "File path for inline comment")
     .option("-l, --line <number>", "Line number for inline comment")
     .option("--parent <hash>", "Parent comment hash (for replies)")
+    .option("--original <hash>", "Hash of the comment to edit")
     .option("--resolve", "Mark thread as resolved", false)
     .option("--author <email>", "Override author email")
     .action(async (commit: string | undefined, options: CommentOptions) => {
@@ -41,6 +42,7 @@ interface CommentOptions {
   readonly file?: string;
   readonly line?: string;
   readonly parent?: string;
+  readonly original?: string;
   readonly resolve: boolean;
   readonly author?: string;
 }
@@ -112,15 +114,56 @@ async function executeComment(
     }
   }
 
-  // Resolve parent hash to full hash if specified
+  // Validate that --original and --parent are not both specified
+  if (options.original && options.parent) {
+    throw new Error(
+      "Cannot specify both --original and --parent. Use --original to edit a comment, --parent to reply to one."
+    );
+  }
+
+  // Resolve original hash (edit) and/or parent hash (reply)
+  let resolvedOriginalHash: string | undefined;
   let resolvedParentHash: string | undefined;
-  if (options.parent) {
+  let originalComment: Comment | undefined;
+
+  if (options.original || options.parent) {
     const existingComments = await readComments(commit);
-    const parentComment = findCommentByShortHash(existingComments, options.parent);
-    if (!parentComment) {
-      throw new Error(`Parent comment not found: ${options.parent}`);
+
+    if (options.original) {
+      originalComment = findCommentByShortHash(existingComments, options.original);
+      if (!originalComment) {
+        throw new Error(`Original comment not found: ${options.original}`);
+      }
+      resolvedOriginalHash = computeCommentHash(originalComment);
     }
-    resolvedParentHash = computeCommentHash(parentComment);
+
+    if (options.parent) {
+      const parentComment = findCommentByShortHash(existingComments, options.parent);
+      if (!parentComment) {
+        throw new Error(`Parent comment not found: ${options.parent}`);
+      }
+      resolvedParentHash = computeCommentHash(parentComment);
+    }
+  }
+
+  // Inherit parent from original comment when editing
+  if (options.original && originalComment?.parent) {
+    resolvedParentHash = originalComment.parent;
+  }
+
+  // Inherit location from original comment when editing
+  if (options.original && originalComment) {
+    if (options.file) {
+      throw new Error(
+        "Cannot specify --file with --original. The location is inherited from the comment being edited."
+      );
+    }
+    if (options.line) {
+      throw new Error(
+        "Cannot specify --line with --original. The location is inherited from the comment being edited."
+      );
+    }
+    location = originalComment.location;
   }
 
   // Create the comment
@@ -128,12 +171,17 @@ async function executeComment(
     author: string;
     description: string;
     parent?: string;
+    original?: string;
     resolved?: boolean;
     location?: CommentLocation;
   } = {
     author,
     description: options.message,
   };
+
+  if (resolvedOriginalHash) {
+    commentParams.original = resolvedOriginalHash;
+  }
 
   if (resolvedParentHash) {
     commentParams.parent = resolvedParentHash;
@@ -158,6 +206,9 @@ async function executeComment(
   if (location) {
     const lineInfo = location.range ? `:${location.range.startLine}` : "";
     console.log(`  Location: ${location.path}${lineInfo}`);
+  }
+  if (options.original) {
+    console.log(`  Original: ${options.original.substring(0, 7)} (edited)`);
   }
   if (options.parent) {
     console.log(`  Reply to: ${options.parent.substring(0, 7)}`);
